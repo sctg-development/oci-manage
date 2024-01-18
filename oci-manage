@@ -4391,4 +4391,5 @@ function cluster_help() {
   echo "wg_meshconf_get_all_peers_sorted:                  parse and sort the wireguard csv db"
   echo "wg_meshconf_init:                                  initialise the wg meshconf database"
   echo "wg_meshconf_showpeers:                             list all peers in wireguard mesh network"
+  private_help
 }
