@@ -1,0 +1,6 @@
+[Unit]
+Description=Look busy (between 28 and 34%)
+[Service]
+ExecStart=/usr/bin/nice -n 15 /usr/local/bin/lb -c 28-34 -r curve -p 30m -P 1h
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,126 @@
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: longhorn-manager-debug
+  labels:
+    app: longhorn-manager-debug
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: longhorn-manager-debug
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: longhorn-manager-debug
+    spec:
+      containers:
+      # sample run
+      # longhorn-manager -d daemon --engine-image longhornio/longhorn-engine:v1.5.1 --instance-manager-image longhornio/longhorn-instance-manager:v1.5.1 --share-manager-image longhornio/longhorn-share-manager:v1.5.1 --backing-image-manager-image longhornio/backing-image-manager:v1.5.1 --support-bundle-manager-image longhornio/support-bundle-kit:v0.0.25 --manager-image longhornio/longhorn-manager:v1.5.1 --service-account longhorn-service-account
+        - name: longhorn-manager
+          image: longhornio/longhorn-manager:v1.5.1
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 9500
+            name: manager
+            protocol: TCP
+          - containerPort: 9501
+            name: conversion-wh
+            protocol: TCP
+          - containerPort: 9502
+            name: admission-wh
+            protocol: TCP
+          - containerPort: 9503
+            name: recov-backend
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /v1/healthz
+              port: 9501
+              scheme: HTTPS
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          command: ["/bin/sh"]
+          args: ["-c", "cd ~/ && sleep infinity"]
+          resources:
+            limits:
+              cpu: 250m
+              memory: "536870912"
+          env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.podIP
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: spec.nodeName
+          securityContext:
+            privileged: true
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /host/dev/
+            name: dev
+          - mountPath: /host/proc/
+            name: proc
+          - mountPath: /var/lib/longhorn/
+            mountPropagation: Bidirectional
+            name: longhorn
+          - mountPath: /tls-files/
+            name: longhorn-grpc-tls
+          - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+            name: kube-api-access-z2b5k
+            readOnly: true
+      serviceAccount: longhorn-service-account
+      serviceAccountName: longhorn-service-account
+      volumes:
+      - hostPath:
+          path: /dev/
+          type: ""
+        name: dev
+      - hostPath:
+          path: /proc/
+          type: ""
+        name: proc
+      - hostPath:
+          path: /var/lib/longhorn/
+          type: ""
+        name: longhorn
+      - name: longhorn-grpc-tls
+        secret:
+          defaultMode: 420
+          optional: true
+          secretName: longhorn-grpc-tls
+      - name: kube-api-access-z2b5k
+        projected:
+          defaultMode: 420
+          sources:
+          - serviceAccountToken:
+              expirationSeconds: 3607
+              path: token
+          - configMap:
+              items:
+              - key: ca.crt
+                path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+              - fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+                path: namespace
+      restartPolicy: Always
+status: {}

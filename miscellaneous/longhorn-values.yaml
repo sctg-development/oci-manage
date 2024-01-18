@@ -1,0 +1,19 @@
+defaultSettings:
+  defaultDataPath: /storage
+  defaultReplicaCount: 1
+persistence:
+  defaultClassReplicaCount: 1
+image:
+  longhorn:
+    backingImageManager:
+      tag: v1.5.1
+    engine:
+      tag: v1.5.1
+    instanceManager:
+      tag: v1.5.1
+    manager:
+      tag: v1.5.1
+    shareManager:
+      tag: v1.5.1
+    ui:
+      tag: v1.5.1

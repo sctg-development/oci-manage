@@ -1,0 +1,9 @@
+[Unit]
+Description=Stress machine at 20%
+[Service]
+ExecStart=/usr/bin/nice -n 15 /usr/bin/stress-ng --cpu 4 --cpu-load 20 -t 0
+[Install]
+WantedBy=multi-user.target
+[Service]
+Restart=on-failure
+RestartSec=5s

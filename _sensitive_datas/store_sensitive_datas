@@ -1,0 +1,16 @@
+#!/bin/bash
+#1-store
+. ./oci-manage
+if [ -z "${CRYPTOKEN}" ]; then
+    echo "CRYPTOKEN is empty: $CRYPTOKEN"
+    exit -1
+fi
+PWD=`pwd`
+cd ~
+tar --exclude .kube/cache -cvJf _sensitive_datas/_sensitive_datas.tar.xz oci-manage-config.sh oci.json bird.conf .bashrc .ssh .kube .oci .azure .docker pki wg/database.csv production iptables/rules.v4
+#2-encrypt
+openssl aes-256-cbc -base64 -md sha256 -pass pass:"$CRYPTOKEN" -in _sensitive_datas/_sensitive_datas.tar.xz -out _sensitive_datas/_sensitive_datas.tar.xz.enc
+#3-delete 
+rm _sensitive_datas/_sensitive_datas.tar.xz
+cd $PWD
+echo "CRYPTED with 'openssl aes-256-cbc -base64 -md sha256 -pass pass:\"$CRYPTOKEN\"'"
