@@ -44,6 +44,7 @@ CLUSTER_HA_FQDN=ha.fqdn.com
 CONTROL_PLANE_INTERNAL_ADDRESS=master.private.fqdn.com
 ROUTING_MEMBER='oci-router'
 #set if needed to access service IP as EXTERNAL_CLUSTER_ZONE
+ETCDCTL_PKI="--cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key"
 EXTERNAL_CLUSTER_ZONE=cluster.external
 CONTROL_PLANE_IP=10.0.253.75
 CONTROL_PLANE_LOCAL=master
@@ -3769,7 +3770,7 @@ persistence:
   size: 10Gi
   accessMode: ReadWriteMany
 image:
-  tag: '5.2'
+  tag: '5.3'
 replicaCount: 1
 adminEmail: '$WEBLATE_EMAIL'
 adminUser: '$WEBLATE_ADMIN'
@@ -4224,6 +4225,15 @@ function git_prune_local_repo() {
    git fetch --depth=1 && git reflog expire --expire-unreachable=now --all && git gc --aggressive --prune=all
 }
 
+function cluster_reboot_instant() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_reboot_instant member"
+  else
+    MEMBER=$1
+    ssh root@$MEMBER "echo 1 > /proc/sys/kernel/sysrq && echo b > /proc/sysrq-trigger"
+  fi
+}
+
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4322,6 +4332,7 @@ function cluster_help() {
   echo "cluster_ping_host_from_members:                    ping the given host from each member"
   echo "cluster_ping6_host_from_members:                   ping the given host from each member with IPv6"
   echo "cluster_reboot:                                    reboot all the cluster"
+  echo "cluster_reboot_instant:                            reboot a member instantly"
   echo "cluster_recreate_private_interface:                recreate all private interface netplan yaml"
   echo "cluster_remove_completed_pods:                     remove all completed pods using a field selector"
   echo "cluster_reset_control_plane:                       delete the control plane"
