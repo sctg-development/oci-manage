@@ -4206,6 +4206,7 @@ function cluster_etcd_get_member_list() {
 }
 
 function cluster_etcd_save_backup_s3() {
+  sudo ETCDCTL_API=3 etcdctl $ETCDCTL_PKI defrag --cluster
   cluster_etcd_snapshot
   cp etcd-snapshots/backup.tar.xz.enc etcd-snapshots/etcd-backup-$(date --iso-8601).tar.xz.enc
   mc cp etcd-snapshots/backup.tar.xz.enc $S3PATH/etcd-backup-$(date --iso-8601).tar.xz.enc
