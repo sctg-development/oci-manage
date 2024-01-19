@@ -3897,7 +3897,9 @@ EOF
   #helm template --namespace $MONITORING_NAMESPACE prometheus prometheus-community/kube-prometheus-stack  --values - <<EOF
   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
   helm repo update prometheus-community
-  helm upgrade --install --namespace $MONITORING_NAMESPACE prometheus prometheus-community/kube-prometheus-stack --values - <<EOF
+  UUID=$(cat /proc/sys/kernel/random/uuid)
+  mkdir -p /tmp/$UUID
+  cat << EOF >/tmp/$UUID/values.yaml
 prometheus:
   ingress:
     enabled: true
@@ -3913,6 +3915,10 @@ prometheus:
       hosts:
         - prometheus.$AZURE_DNS_ZONE
 grafana:
+  downloadDashboardsImage:
+    registry:	docker.io
+    repository:	highcanfly/net-tools
+    tag: latest
   adminPassword: "$MASTER_ADMIN_PASSWORD"
   sidecar:
     dashboards:
@@ -3934,22 +3940,22 @@ grafana:
     dashboardproviders.yaml:
       apiVersion: 1
       providers:
-      # - name: 'grafana-dashboards-kubernetes'
-      #   orgId: 1
-      #   folder: 'Kubernetes'
-      #   type: file
-      #   disableDeletion: true
-      #   editable: true
-      #   options:
-      #     path: /var/lib/grafana/dashboards/grafana-dashboards-kubernetes
-      # - name: 'grafana-dashboards-kubernetes-integration'
-      #   orgId: 1
-      #   folder: 'Integration'
-      #   type: file
-      #   disableDeletion: true
-      #   editable: true
-      #   options:
-      #     path: /var/lib/grafana/dashboards/grafana-dashboards-kubernetes-integration
+      - name: 'grafana-dashboards-kubernetes'
+        orgId: 1
+        folder: 'Kubernetes'
+        type: file
+        disableDeletion: true
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/grafana-dashboards-kubernetes
+      - name: 'grafana-dashboards-kubernetes-integration'
+        orgId: 1
+        folder: 'Integration'
+        type: file
+        disableDeletion: true
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/grafana-dashboards-kubernetes-integration
   dashboards:
     grafana-dashboards-kubernetes:
       k8s-system-api-server:
@@ -4018,6 +4024,8 @@ grafana:
         access: proxy
         isDefault: true
 EOF
+helm upgrade --install --namespace $MONITORING_NAMESPACE prometheus prometheus-community/kube-prometheus-stack --values /tmp/$UUID/values.yaml
+rm -rf /tmp/$UUID
 }
 
 function cluster_runners_clean() {
@@ -4234,6 +4242,17 @@ function cluster_reboot_instant() {
   fi
 }
 
+function cluster_reboot_instant_all() {
+  for MEMBER in $K8S_CLUSTER; do
+    echo "********************$MEMBER******************"
+    cluster_reboot_instant $MEMBER
+  done
+}
+
+function get_helm(){
+  curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+}
+
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4333,6 +4352,7 @@ function cluster_help() {
   echo "cluster_ping6_host_from_members:                   ping the given host from each member with IPv6"
   echo "cluster_reboot:                                    reboot all the cluster"
   echo "cluster_reboot_instant:                            reboot a member instantly"
+  echo "cluster_reboot_instant_all:                        reboot all the cluster instantly"
   echo "cluster_recreate_private_interface:                recreate all private interface netplan yaml"
   echo "cluster_remove_completed_pods:                     remove all completed pods using a field selector"
   echo "cluster_reset_control_plane:                       delete the control plane"
@@ -4371,6 +4391,7 @@ function cluster_help() {
   echo "dev_local_registry_get_podname:                    retrieve dev local registry pod name"
   echo "get_gateway_from_ip:                               get gateway for ip"
   echo "get_gateway:                                       get gateway for named host"
+  echo "get_helm:                                          install helm"
   echo "get_host_arch:                                     display the debian host arch"
   echo "get_kube_dns_ip:                                   compute kube-dns internal ip for Service CIDR"
   echo "get_remote_interface_from_ip:                      get the remote interface corresponding to ip"
