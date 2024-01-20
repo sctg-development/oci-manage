@@ -117,7 +117,7 @@ Each member has their own "tenancy", they have deployed one, two, three or four 
 
 | Element | Choice |
 | :--------- | :----------------- |
-| Cluster | Kubernetes v1.29.0 |
+| Cluster | Kubernetes v1.29.1 |
 | CNI | Cilium 1.14.5 |
 | Routing | BGP |
 | Connections | VXLAN |

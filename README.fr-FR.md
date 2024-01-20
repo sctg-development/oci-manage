@@ -108,7 +108,7 @@ Chaque membre a sa propre "location", il a déployé une, deux, trois ou quatre 
 ### 1.3.2. Choix
 | Élément    | Choix              |
 | :--------- | :----------------- |
-| Cluster    | Kubernetes v1.29.0 |
+| Cluster    | Kubernetes v1.29.1 |
 | CNI        | Cilium 1.14.5      |
 | routage    | BGP                |
 | Connexions | VXLAN              |
