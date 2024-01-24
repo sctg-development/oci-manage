@@ -38,8 +38,8 @@ CF_DOMAINS=("example.org" "example.com")
 CLUSTER_AS=4201234567
 CLUSTER_MEMBERS='node2 node3 node4 node5 node6 node7 node8'
 CILIUM_CLUSTER_POOL_IPV4_KUBERNETES_POD_CIDR=172.24.0.0/13
-CILIUM_CLUSTER_POOL_IPV6_KUBERNETES_POD_CIDR=fa62:83ce:1203:1234::/63
-CILIUM_VERSION="v1.14.5" #"v1.13.6"
+CILIUM_CLUSTER_POOL_IPV6_KUBERNETES_POD_CIDR=fd62:83ce:1203:1234::/63
+CILIUM_VERSION="v1.14.6" #"v1.13.6"
 CLUSTER_HA_FQDN=ha.fqdn.com
 CONTROL_PLANE_INTERNAL_ADDRESS=master.private.fqdn.com
 ROUTING_MEMBER='oci-router'
@@ -623,6 +623,7 @@ function cluster_cilium_install() {
   CILIUM_CONFIG="--set envoy.enabled=$KUBE_PROXY_REPLACEMENT --set k8sServiceHost=$CONTROL_PLANE_IP \
       --set k8sServicePort=$CONTROL_PLANE_PORT \
       --set $IPAM --set tunnel=vxlan \
+      --set ipv6.enabled=false \
       --set bpf.masquerade=true \
       --set bgpControlPlane.enabled=false \
       --set bgp.announce.loadbalancerIP=false \
@@ -630,18 +631,13 @@ function cluster_cilium_install() {
       --set hubble.relay.enabled=true \
       --set hubble.ui.enabled=true \
       --version $CILIUM_VERSION "
-  if [[ "$1" == "upgrade" ]]; then
-    helm upgrade cilium cilium/cilium --namespace=kube-system \
-      $CILIUM_CONFIG
-
-  elif [[ "$1" == "UNINSTALL" ]]; then
+  if [[ "$1" == "UNINSTALL" ]]; then
     helm uninstall cilium --namespace=kube-system
   else
     #IPAM="ipam.mode=cluster-pool,ipam.operator.clusterPoolIPv4PodCIDRList=$CILIUM_CLUSTER_POOL_IPV4_KUBERNETES_POD_CIDR"
     helm repo add cilium https://helm.cilium.io/
     echo $CILIUM_CONFIG
-    helm install cilium cilium/cilium \
-      --namespace=kube-system \
+    helm upgrade --install --namespace=kube-system --create-namespace cilium cilium/cilium \
       $CILIUM_CONFIG
   #kubectl apply -f /tmp/cilium.yaml
   #rm -f /tmp/cilium.yaml
@@ -771,7 +767,7 @@ function cluster_init_create_another_control_plane() {
   fi
 }
 
-function cluster_delete_member(){
+function cluster_delete_member() {
   if [ "$#" -ne 1 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_delete_member member"
   else
@@ -3900,7 +3896,7 @@ EOF
   helm repo update prometheus-community
   UUID=$(cat /proc/sys/kernel/random/uuid)
   mkdir -p /tmp/$UUID
-  cat << EOF >/tmp/$UUID/values.yaml
+  cat <<EOF >/tmp/$UUID/values.yaml
 prometheus:
   ingress:
     enabled: true
@@ -4025,8 +4021,8 @@ grafana:
         access: proxy
         isDefault: true
 EOF
-helm upgrade --install --namespace $MONITORING_NAMESPACE prometheus prometheus-community/kube-prometheus-stack --values /tmp/$UUID/values.yaml
-rm -rf /tmp/$UUID
+  helm upgrade --install --namespace $MONITORING_NAMESPACE prometheus prometheus-community/kube-prometheus-stack --values /tmp/$UUID/values.yaml
+  rm -rf /tmp/$UUID
 }
 
 function cluster_runners_clean() {
@@ -4197,21 +4193,44 @@ function cluster_etcd_install_binaries() {
 }
 
 function cluster_etcd_snapshot() {
-  sudo ETCDCTL_API=3 etcdctl snapshot save snapshot.db --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key &&
-    sudo tar -cv snapshot.db /etc/kubernetes/pki /etc/kubernetes/manifests /etc/kubernetes/*.conf | xz -9 | openssl enc -aes-256-cbc -base64 -md sha256 -pass pass:"$CRYPTOKEN" >etcd-snapshots/backup.tar.xz.enc &&
-    sudo rm -rf snapshot.db
+  KUBERNETES_CONTROL_PLANE=$(kubectl get nodes --selector node-role.kubernetes.io/control-plane -o jsonpath='{.items[*].metadata.name}')
+  BASE_BACKUP_DIR=$(pwd)/etcd-snapshots
+  for node in $KUBERNETES_CONTROL_PLANE; do
+    echo "Processing node: $node"
+    ssh root@$node "ETCDCTL_API=3 etcdctl snapshot save snapshot.db --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key"
+    ssh root@$node "tar -cv snapshot.db /etc/kubernetes/pki /etc/kubernetes/manifests /etc/kubernetes/*.conf | xz -9 | openssl enc -aes-256-cbc -base64 -md sha256 -pass pass:'$CRYPTOKEN' > $BASE_BACKUP_DIR/backup.tar.xz.enc"
+    ssh root@$node "rm -rf snapshot.db"
+    scp root@$node:$BASE_BACKUP_DIR/backup.tar.xz.enc $BASE_BACKUP_DIR/backup-$node.tar.xz.enc
+  done
 }
 
 function cluster_etcd_get_member_list() {
-  sudo ETCDCTL_API=3 etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key member list 
+  sudo ETCDCTL_API=3 etcdctl --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key member list
 }
 
 function cluster_etcd_save_backup_s3() {
   sudo ETCDCTL_API=3 etcdctl $ETCDCTL_PKI defrag --cluster
   cluster_etcd_snapshot
-  cp etcd-snapshots/backup.tar.xz.enc etcd-snapshots/etcd-backup-$(date --iso-8601).tar.xz.enc
-  mc cp etcd-snapshots/backup.tar.xz.enc $S3PATH/etcd-backup-$(date --iso-8601).tar.xz.enc
-  rm etcd-snapshots/etcd-backup-$(date --iso-8601).tar.xz.enc
+  KUBERNETES_CONTROL_PLANE=$(kubectl get nodes --selector node-role.kubernetes.io/control-plane -o jsonpath='{.items[*].metadata.name}')
+  for node in $KUBERNETES_CONTROL_PLANE; do
+    echo "Processing node: $node"
+    cp etcd-snapshots/backup-$node.tar.xz.enc etcd-snapshots/etcd-backup-$(date --iso-8601).tar.xz.enc
+    mc cp etcd-snapshots/backup-$node.tar.xz.enc $S3PATH/etcd-backup-$(date --iso-8601).tar.xz.enc
+    rm etcd-snapshots/etcd-backup-$(date --iso-8601).tar.xz.enc
+  done
+}
+
+# crypto_cat is a function to decrypt a file with openssl
+# it uses automatically the CRYPTOKEN variable as password
+# use the stdout to pipe it to another command
+function crypto_cat() {
+  DECRYPT=""
+  if [ -n "$CRYPTOKEN" ]; then
+    DECRYPT="-pass pass:$CRYPTOKEN"
+  else
+    DECRYPT=""
+  fi
+  openssl aes-256-cbc -a -d -md sha256 $DECRYPT -in $1 -out -
 }
 
 function cluster_apt_update_kubernetes_repo() {
@@ -4223,16 +4242,16 @@ function cluster_apt_update_kubernetes_repo() {
   fi
 }
 
-function cluster_master_allow_schedule(){
-  CONTROL_PLANES=`kubectl get nodes | grep control-plane | awk '{print $1}'`
+function cluster_master_allow_schedule() {
+  CONTROL_PLANES=$(kubectl get nodes | grep control-plane | awk '{print $1}')
   for CONTROL in $CONTROL_PLANES; do
     kubectl taint node $CONTROL node-role.kubernetes.io/control-plane:NoSchedule-
   done
-  
+
 }
 
 function git_prune_local_repo() {
-   git fetch --depth=1 && git reflog expire --expire-unreachable=now --all && git gc --aggressive --prune=all
+  git fetch --depth=1 && git reflog expire --expire-unreachable=now --all && git gc --aggressive --prune=all
 }
 
 function cluster_reboot_instant() {
@@ -4251,8 +4270,24 @@ function cluster_reboot_instant_all() {
   done
 }
 
-function get_helm(){
+function get_helm() {
   curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+}
+
+# This function generates a random IPv6 address compliant with RFC4193.
+# RFC4193 addresses are local IPv6 addresses with a prefix of fd or fc.
+# The function first generates a random prefix of fc or fd.
+# Then, it generates a Local Unicast Identifier (LUI) which is a 40-bit random number.
+# The prefix and the LUI are combined to form a 48-bit IPv6 address.
+# The function then formats this address by inserting ':' every four characters.
+# Finally, it removes the trailing ':' and appends '::/48' to indicate a 48-bit network prefix.
+function get_random_ipv6_rfc4193() {
+  #PREFIX=f$((( RANDOM % 2 )) && echo -n "c" || echo -n "d")
+  PREFIX=fd
+  LUI=$(openssl rand -hex 5)
+  CIDR=$(echo -n $PREFIX$LUI | sed 's/\(....\)/\1:/g')
+  CIDR=${CIDR::-1}
+  echo $CIDR::/48
 }
 
 function cluster_help() {
@@ -4386,6 +4421,7 @@ function cluster_help() {
   echo "cluster_traefik_launch_simple_proxy:               lauche simpleproxy from private ip to traefik loadbalancer"
   echo "cluster_update_k8s_pause:                          update registry.k8s.io/pause to the given version"
   echo "cluster_untaint_disk_pressure_all:                 untaint all disk pressure"
+  echo "crypto_cat:                                        decrypt a file with openssl"
   echo "create_admin_user_with_key:                        create an admin user with its home directory and a ssh key"
   echo "dashboard_get_token:                               retrieve dashboard administrator token"
   echo "dev_install_local_registry                         create a local docker registry without pvc for developpement (docker-registry.local)"
@@ -4396,6 +4432,7 @@ function cluster_help() {
   echo "get_helm:                                          install helm"
   echo "get_host_arch:                                     display the debian host arch"
   echo "get_kube_dns_ip:                                   compute kube-dns internal ip for Service CIDR"
+  echo "get_random_ipv6_rfc4193:                           generate a random IPv6 address compliant with RFC4193"
   echo "get_remote_interface_from_ip:                      get the remote interface corresponding to ip"
   echo "get_remote_interface:                              get the remote interface on a host giving its mac address"
   echo "get_subnet_16:                                     get full subnet"
