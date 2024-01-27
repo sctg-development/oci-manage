@@ -4203,6 +4203,7 @@ function cluster_etcd_snapshot() {
     ssh root@$node "tar -cv snapshot.db /etc/kubernetes/pki /etc/kubernetes/manifests /etc/kubernetes/*.conf | xz -9 | openssl enc -aes-256-cbc -base64 -md sha256 -pass pass:'$CRYPTOKEN' > $BASE_BACKUP_DIR/backup.tar.xz.enc"
     ssh root@$node "rm -rf snapshot.db"
     scp root@$node:$BASE_BACKUP_DIR/backup.tar.xz.enc $BASE_BACKUP_DIR/backup-$node.tar.xz.enc
+    ssh root@$node "rm -rf $BASE_BACKUP_DIR/backup.tar.xz.enc"
   done
 }
 
@@ -4365,7 +4366,7 @@ function cluster_help() {
   echo "cluster_init_install_traefik:                      deploy the traefik helm chart in kube-traefik namespace"
   echo "cluster_init_sysctl_value:                         set the needed sysctl values"
   echo "cluster_install_haproxy_2_7:                       install haproxy 2.7 and haproxy-ingress external"
-  echo "cluster_install_haproxy_2_7_single:                install haproxy 2.7 and haproxy-ingress external on sigle node"
+  echo "cluster_install_haproxy_2_7_single:                install haproxy 2.7 and haproxy-ingress external on single node"
   echo "cluster_install_helm_dashboard_ingress:            create an ingress for the helm dashboard"
   echo "cluster_install_helm_dashboard:                    install the helm dashboard"
   echo "cluster_install_qemu_x86_64_for_build:             cluster_install_qemu_x86_64_for_build"
