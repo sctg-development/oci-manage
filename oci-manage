@@ -4200,7 +4200,7 @@ function cluster_etcd_snapshot() {
   for node in $KUBERNETES_CONTROL_PLANE; do
     echo "Processing node: $node"
     ssh root@$node "ETCDCTL_API=3 etcdctl snapshot save snapshot.db --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key"
-    ssh root@$node "tar -cv snapshot.db /etc/kubernetes/pki /etc/kubernetes/manifests /etc/kubernetes/*.conf | xz -9 | openssl enc -aes-256-cbc -base64 -md sha256 -pass pass:'$CRYPTOKEN' > $BASE_BACKUP_DIR/backup.tar.xz.enc"
+    ssh root@$node "tar -cv snapshot.db  /usr/lib/systemd/system/kubelet.service  /usr/lib/systemd/system/kubelet.service.d /etc/haproxy/haproxy.cfg /etc/kubernetes/pki /etc/kubernetes/manifests /etc/kubernetes/*.conf | xz -9 | openssl enc -aes-256-cbc -base64 -md sha256 -pass pass:'$CRYPTOKEN' > $BASE_BACKUP_DIR/backup.tar.xz.enc"
     ssh root@$node "rm -rf snapshot.db"
     scp root@$node:$BASE_BACKUP_DIR/backup.tar.xz.enc $BASE_BACKUP_DIR/backup-$node.tar.xz.enc
     ssh root@$node "rm -rf $BASE_BACKUP_DIR/backup.tar.xz.enc"
