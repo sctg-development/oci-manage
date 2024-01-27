@@ -4293,6 +4293,14 @@ function get_random_ipv6_rfc4193() {
   echo $CIDR::/48
 }
 
+cluster_control_plane_renew_certificates(){
+  CONTROL_PLANES=$(kubectl get nodes | grep control-plane | awk '{print $1}')
+  for CONTROL in $CONTROL_PLANES; do
+    echo "********************$CONTROL******************"
+    ssh root@$CONTROL "kubeadm certs renew all && systemctl restart kubelet"
+  done
+}
+
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4304,6 +4312,7 @@ function cluster_help() {
   echo 'cluster_cilium_hostip_all:                         get all cilium pods IPP'
   echo 'cluster_cilium_hostip_cross_ping:                  ping all cilium interfaces'
   echo 'cluster_cloudflare_external_dns:                   create external dns for cloudflare dns 'needs CF_API_KEY and CF_API_EMAIL''
+  echo 'cluster_control_plane_renew_certificates:          renew all control plane certificates'
   echo 'cluster_copy_dir_as_root:                          copy local dir to remote dir (take care of the trailing slashes)'
   echo 'cluster_copy_file_and_run_as_root:                 copy local file as root to each member and runs it remotely'
   echo 'cluster_copy_file_as_current_user:                 copy local file to each member'
