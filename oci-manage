@@ -3283,12 +3283,21 @@ function cluster_haproxy_stop() {
 }
 
 function cluster_haproxy_start() {
-  cluster_run_on_all_as_root "systemctl start haproxy-ingress"
+  cluster_run_on_all_as_root "systemctl start haproxy ; systemctl start haproxy-ingress"
 }
 
 function cluster_haproxy_restart() {
   cluster_haproxy_stop
+  sleep 5
   cluster_haproxy_start
+}
+
+function cluster_haproxy_reload() {
+  cluster_run_on_all_as_root "systemctl reload haproxy ; systemctl reload haproxy-ingress"
+}
+
+function cluster_haproxy_k8s_status() {
+  cluster_run_on_all_as_root "curl -k -s -I https://k8s-api.private:6443"
 }
 
 function cluster_haproxy_status() {
@@ -4412,6 +4421,7 @@ function cluster_help() {
   echo "cluster_reset_remove_kubevirt:                     uninstall kubevirt"
   echo "cluster_reset_remove_oci_dns_issuer:               remove the OCI Letsencrypt certificate issuers"
   echo "cluster_reset_storage:                             empty all /storage"
+  echo "cluster_haproxy_k8s_status:                        status haproxy for k8s high availability"
   echo "cluster_haproxy_restart:                           restart haproxy"
   echo "cluster_haproxy_status:                            status haproxy"
   echo "cluster_haproxy_start:                             start haproxy"
