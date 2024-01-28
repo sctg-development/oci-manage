@@ -4084,7 +4084,7 @@ grafana:
         url: https://raw.githubusercontent.com/eltorio/oci-manage/main/miscellaneous/dashboards/pvc.json
         token: ''
       longhorn:
-        url: https://raw.githubusercontent.com/eltorio/oci-manage/main/miscellaneous/dashboards/lonhorn.json
+        url: https://raw.githubusercontent.com/eltorio/oci-manage/main/miscellaneous/dashboards/longhorn.json
         token: ''
     grafana-dashboards-cilium:
       cilium:
