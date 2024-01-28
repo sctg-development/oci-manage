@@ -3926,6 +3926,18 @@ prometheus:
       endpoints:
         - port: envoy-metrics
           path: /metrics
+    - name: longhorn
+      selector:
+        matchLabels:
+          app: longhorn-manager
+      namespaceSelector:
+        matchNames:
+          - longhorn-system
+      targetLabels:
+        - app
+      endpoints:
+        - port: manager
+          path: /metrics
   additionalPodMonitors:
     - name: cilium
       selector:
@@ -4070,6 +4082,9 @@ grafana:
         token: ''
       pvc:
         url: https://raw.githubusercontent.com/eltorio/oci-manage/main/miscellaneous/dashboards/pvc.json
+        token: ''
+      longhorn:
+        url: https://raw.githubusercontent.com/eltorio/oci-manage/main/miscellaneous/dashboards/lonhorn.json
         token: ''
     grafana-dashboards-cilium:
       cilium:
