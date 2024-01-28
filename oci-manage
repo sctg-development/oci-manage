@@ -3913,6 +3913,44 @@ EOF
   mkdir -p /tmp/$UUID
   cat <<EOF >/tmp/$UUID/values.yaml
 prometheus:
+  additionalServiceMonitors:
+    - name: cilium-envoy
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: cilium-envoy
+      namespaceSelector:
+        matchNames:
+          - kube-system
+      targetLabels:
+        - k8s-app
+      endpoints:
+        - port: envoy-metrics
+          path: /metrics
+  additionalPodMonitors:
+    - name: cilium
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: cilium-agent
+      namespaceSelector:
+        matchNames:
+          - kube-system
+      podTargetLabels:
+        - k8s-app
+      podMetricsEndpoints:
+        - port: prometheus
+          path: /metrics
+    - name: cilium-operator
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: cilium-operator
+      namespaceSelector:
+        matchNames:
+          - kube-system
+      podTargetLabels:
+        - io.cilium/app
+      podMetricsEndpoints:
+        - port: prometheus
+          path: /metrics
   ingress:
     enabled: true
     ingressClassName: haproxy
@@ -3970,7 +4008,7 @@ grafana:
           path: /var/lib/grafana/dashboards/grafana-dashboards-kubernetes-integration
       - name: 'grafana-dashboards-cilium'
         orgId: 1
-        folder: 'Integration'
+        folder: 'Cilium'
         type: file
         disableDeletion: true
         editable: true
