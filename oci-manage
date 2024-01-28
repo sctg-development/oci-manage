@@ -6,7 +6,7 @@
 # Feel free to contribute to this project at:
 #    https://github.com/eltorio/oci-manage
 #
-# Copyright 2023 Ronan Le Meillat.
+# Copyright 2023-2024 Ronan Le Meillat.
 #
 # oci-manage is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -38,7 +38,7 @@ CF_DOMAINS=("example.org" "example.com")
 CLUSTER_AS=4201234567
 CLUSTER_MEMBERS='node2 node3 node4 node5 node6 node7 node8'
 CILIUM_CLUSTER_POOL_IPV4_KUBERNETES_POD_CIDR=172.24.0.0/13
-CILIUM_CLUSTER_POOL_IPV6_KUBERNETES_POD_CIDR=fd62:83ce:1203:1234::/63
+CILIUM_CLUSTER_POOL_IPV6_KUBERNETES_POD_CIDR=fd62:83ce:1203:1234::/64
 CILIUM_VERSION="v1.14.6" #"v1.13.6"
 CLUSTER_HA_FQDN=ha.fqdn.com
 CONTROL_PLANE_INTERNAL_ADDRESS=master.private.fqdn.com
@@ -630,6 +630,10 @@ function cluster_cilium_install() {
       --set bgp.announce.podCIDR=false \
       --set hubble.relay.enabled=true \
       --set hubble.ui.enabled=true \
+      --set prometheus.enabled=true \
+      --set operator.prometheus.enabled=true \
+      --set hubble.metrics.enabled=true \
+      --set hubble.metrics.enableOpenMetrics=true \
       --version $CILIUM_VERSION "
   if [[ "$1" == "UNINSTALL" ]]; then
     helm uninstall cilium --namespace=kube-system
@@ -3297,7 +3301,7 @@ function cluster_haproxy_reload() {
 }
 
 function cluster_haproxy_k8s_status() {
-  cluster_run_on_all_as_root "curl -k -s -I https://k8s-api.private:6443"
+  cluster_run_on_all_as_root "curl -k -s -I https://k8s-api.private:6443/livez"
 }
 
 function cluster_haproxy_status() {
@@ -3964,6 +3968,14 @@ grafana:
         editable: true
         options:
           path: /var/lib/grafana/dashboards/grafana-dashboards-kubernetes-integration
+      - name: 'grafana-dashboards-cilium'
+        orgId: 1
+        folder: 'Integration'
+        type: file
+        disableDeletion: true
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/grafana-dashboards-cilium
   dashboards:
     grafana-dashboards-kubernetes:
       k8s-system-api-server:
@@ -4021,7 +4033,10 @@ grafana:
       pvc:
         url: https://raw.githubusercontent.com/eltorio/oci-manage/main/miscellaneous/dashboards/pvc.json
         token: ''
-
+    grafana-dashboards-cilium:
+      cilium:
+        url: https://raw.githubusercontent.com/eltorio/oci-manage/main/miscellaneous/dashboards/cilium.json
+        token: ''
   datasources:
     datasources.yaml:
       apiVersion: 1

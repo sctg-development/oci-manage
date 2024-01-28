@@ -1,3 +1,8 @@
+# This YAML manifest defines the configuration for scraping Cilium, Envoy, and Cilium Operator.
+# It specifies the necessary resources and settings to collect metrics from these components.
+# The scraping process enables monitoring and observability of Cilium, Envoy, and Cilium Operator
+# by exporting their metrics and logs to prometheus monitoring system.
+
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
