@@ -62,6 +62,7 @@ OCI_PRIVATE_KEY="LS0tLS1CRUdJTiB………VZBVEUgS0VZLS0tLS0K"
 OCI_REGION="eu-marseille-1"
 OCI_TENANCY="ocid1.tenancy.oc1..9d843b1968e162816404c78f2afc854b15fd3d996008f9827e3028ce2e96e3c3"
 OCI_USER="ocid1.user.oc1..9d843b1968e162816404c78f2afc854b15fd3d996008f9827e3028ce2e96e3c3"
+PRODUCTION_DIR="/home/$USER/production"
 KUBERNETES_POD_CIDR=172.28.0.0/14
 PRIVATE_INTERFACE_FILE="60-private-interface.yaml"
 KUBERNETES_SERVICE_CIDR=172.24.0.0/14
@@ -4277,7 +4278,7 @@ function cluster_etcd_snapshot() {
   for node in $KUBERNETES_CONTROL_PLANE; do
     echo "Processing node: $node"
     ssh root@$node "ETCDCTL_API=3 etcdctl snapshot save snapshot.db --cacert /etc/kubernetes/pki/etcd/ca.crt --cert /etc/kubernetes/pki/etcd/server.crt --key /etc/kubernetes/pki/etcd/server.key"
-    ssh root@$node "tar -cv snapshot.db  /usr/lib/systemd/system/kubelet.service  /usr/lib/systemd/system/kubelet.service.d /etc/haproxy/haproxy.cfg /etc/kubernetes/pki /etc/kubernetes/manifests /etc/kubernetes/*.conf | xz -9 | openssl enc -aes-256-cbc -base64 -md sha256 -pass pass:'$CRYPTOKEN' > $BASE_BACKUP_DIR/backup.tar.xz.enc"
+    ssh root@$node "tar -cv snapshot.db  /usr/lib/systemd/system/kubelet.service  /usr/lib/systemd/system/kubelet.service.d /etc/haproxy/haproxy.cfg /etc/kubernetes/pki /etc/kubernetes/manifests /etc/kubernetes/*.conf $PRODUCTION_DIR | xz -9 | openssl enc -aes-256-cbc -base64 -md sha256 -pass pass:'$CRYPTOKEN' > $BASE_BACKUP_DIR/backup.tar.xz.enc"
     ssh root@$node "rm -rf snapshot.db"
     scp root@$node:$BASE_BACKUP_DIR/backup.tar.xz.enc $BASE_BACKUP_DIR/backup-$node.tar.xz.enc
     ssh root@$node "rm -rf $BASE_BACKUP_DIR/backup.tar.xz.enc"
