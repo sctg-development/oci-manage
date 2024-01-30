@@ -95,7 +95,7 @@ LONGHORN_VERSION="1.5.3"
 LONGHORN_CA_ISSUER=$CA_COMPANY-ca-issuer
 MONITORING_NAMESPACE=monitoring
 GRAFANA_AGENT_VERSION="v0.32.1"
-GATEWAY_API_VERSION="v0.8.1"
+GATEWAY_API_VERSION="v1.0.0"
 KUBE_STATE_METRICS_VERSION="v2.10.0"
 GRAFANA_CLUSTER_NAME="KubernetesOCI"
 GRAFANA_PROMETHEUS_USERNAME="123456"
@@ -4355,6 +4355,11 @@ function get_helm() {
   curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
+function install_go(){
+  VERSION=${1:-"1.21.6"}
+  sudo rm -rf /usr/local/go/* && curl -L https://go.dev/dl/go${VERSION}.linux-$(dpkg --print-architecture).tar.gz | sudo tar -C /usr/local -xvz
+}
+
 # This function generates a random IPv6 address compliant with RFC4193.
 # RFC4193 addresses are local IPv6 addresses with a prefix of fd or fc.
 # The function first generates a random prefix of fc or fd.
@@ -4539,6 +4544,7 @@ function cluster_help() {
   echo "init_set_hostname:                                 set the hostname of the new member"
   echo "init_set_iptables_members:                         set iptables an all members"
   echo "init_set_iptables:                                 deploy the needed iptables on the new host"
+  echo "install_go:                                        install go"
   echo "oci_get_all_tenancy_compartment_triplet:           get all tenancy and compartment ocid from oci.json"
   echo "oci_action_instance:                               execute an action (ex RESET) on one instance via oci api"
   echo "oci_action_all_instances:                          execute an action (ex RESET) on all instance via oci api"
