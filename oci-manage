@@ -811,6 +811,7 @@ function cluster_init_create_member() {
 }
 function cluster_gateway_system_enable() {
   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/$GATEWAY_API_VERSION/experimental-install.yaml
+  # kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/$GATEWAY_API_VERSION/webhook-install.yaml
 }
 
 function cluster_init_sysctl_value() {
@@ -3547,20 +3548,36 @@ function cluster_install_haproxy_2_7() {
 
 function get_install_haproxy_ingress_controller() {
   # URL="https://github.com/haproxytech/kubernetes-ingress/releases/download/v$HAPROXY_INGRESS_CONTROLLER_VERSION/haproxy-ingress-controller_"$HAPROXY_INGRESS_CONTROLLER_VERSION"_Linux_$(dpkg --print-architecture).tar.gz"
-  sudo systemctl stop haproxy-ingress
   # curl -fsSL $URL | sudo tar -C /usr/local/bin/ --overwrite -xvz haproxy-ingress-controller
   cd "$HOME" || exit
-  git clone https://github.com/eltorio/kubernetes-ingress &&
+  if [ -d "$HOME/kubernetes-ingress" ]; then
     cd kubernetes-ingress &&
+    git checkout TCPRouteProxyV2 &&
+    git pull
+  else
+    git clone -b TCPRouteProxyV2 https://github.com/eltorio/kubernetes-ingress &&
+    cd kubernetes-ingress
+  fi
     go mod tidy -v &&
-    go build -v . &&
-    ls -lh kubernetes-ingress &&
-    sudo cp kubernetes-ingress /usr/local/bin/haproxy-ingress-controller
-  cd "$HOME" && rm -rf kubernetes-ingress
-  kubectl delete -n kube-system configmap haproxy-kubernetes-ingress
-  kubectl delete -n kube-system configmap haproxy-kubernetes-tcpservices
-  kubectl create -n kube-system configmap haproxy-kubernetes-ingress
-  kubectl create -n kube-system configmap haproxy-kubernetes-tcpservices
+    BUILD_FOR_ARCHS="amd64 arm64"
+    for ARCH in $BUILD_FOR_ARCHS; do
+      echo "Building for $ARCH"
+      GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -v -o kubernetes-ingress-$ARCH . 
+    done
+  for MEMBER in $K8S_CLUSTER; do
+    echo "Updating $MEMBER"
+    MEMBER_ARCH=$(ssh root@$MEMBER "dpkg --print-architecture")
+    ssh root@$MEMBER "systemctl stop haproxy-ingress"
+    scp kubernetes-ingress-$MEMBER_ARCH root@$MEMBER:/usr/local/bin/haproxy-ingress-controller
+    ssh root@$MEMBER "systemctl start haproxy-ingress"
+  done
+  cd "$HOME" || exit
+  #   sudo cp kubernetes-ingress /usr/local/bin/haproxy-ingress-controller
+  # cd "$HOME" && rm -rf kubernetes-ingress
+  # kubectl delete -n kube-system configmap haproxy-kubernetes-ingress
+  # kubectl delete -n kube-system configmap haproxy-kubernetes-tcpservices
+  # kubectl create -n kube-system configmap haproxy-kubernetes-ingress
+  # kubectl create -n kube-system configmap haproxy-kubernetes-tcpservices
 }
 
 function cluster_create_haproxy_ingress_class() {
@@ -4314,6 +4331,15 @@ function crypto_cat() {
   openssl aes-256-cbc -a -d -md sha256 $DECRYPT -in $1 -out -
 }
 
+function crypto_curl(){
+  DECRYPT=""
+  if [ -n "$CRYPTOKEN" ]; then
+    DECRYPT="-pass pass:$CRYPTOKEN"
+  else
+    DECRYPT=""
+  fi
+  curl -L -s $1 | openssl aes-256-cbc -a -d -md sha256 $DECRYPT -out -
+}
 function cluster_apt_update_kubernetes_repo() {
   if [ "$#" -ne 1 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_apt_update_kubernetes_repo version (ie: 1.29)"
@@ -4518,6 +4544,7 @@ function cluster_help() {
   echo "cluster_update_k8s_pause:                          update registry.k8s.io/pause to the given version"
   echo "cluster_untaint_disk_pressure_all:                 untaint all disk pressure"
   echo "crypto_cat:                                        decrypt a file with openssl"
+  echo "crypto_curl:                                       decrypt a curl url with openssl"
   echo "create_admin_user_with_key:                        create an admin user with its home directory and a ssh key"
   echo "dashboard_get_token:                               retrieve dashboard administrator token"
   echo "dev_install_local_registry                         create a local docker registry without pvc for developpement (docker-registry.local)"
