@@ -131,7 +131,7 @@ WEBLATE_REGISTRATION_EMAIL_MATCH='r".*"'
 WEBLATE_GPG_IDENTITY="weblate@weblate.org"
 ############### end of default values
 
-source ~/oci-manage-config.sh
+source $HOME/oci-manage-config.sh
 
 CLUSTER_DOMAIN=${CLUSTER_HA_FQDN#${CLUSTER_HA_FQDN%%.*}.}
 MASTER_ADMIN_PASSWORD_CRYPTB64=$(openssl passwd -1 $MASTER_ADMIN_PASSWORD | base64)

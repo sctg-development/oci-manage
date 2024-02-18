@@ -52,3 +52,4 @@ production/
 iptables/rules.v4
 .cloudflared
 .mc
+.selected_editor

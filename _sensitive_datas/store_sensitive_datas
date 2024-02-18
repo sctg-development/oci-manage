@@ -7,7 +7,7 @@ if [ -z "${CRYPTOKEN}" ]; then
 fi
 PWD=`pwd`
 cd ~
-tar --exclude .kube/cache -cvJf _sensitive_datas/_sensitive_datas.tar.xz oci-manage-config.sh oci.json .bashrc .ssh .kube .oci .azure .docker pki wg/database.csv production iptables/rules.v4
+tar --exclude .kube/cache -cvJf _sensitive_datas/_sensitive_datas.tar.xz oci-manage-config.sh oci.json .mc .bashrc .ssh .kube .oci .azure .docker pki wg/database.csv production iptables/rules.v4
 #2-encrypt
 openssl aes-256-cbc -base64 -md sha256 -pass pass:"$CRYPTOKEN" -in _sensitive_datas/_sensitive_datas.tar.xz -out _sensitive_datas/_sensitive_datas.tar.xz.enc
 #3-delete 
