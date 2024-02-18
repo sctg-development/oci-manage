@@ -90,7 +90,7 @@ STORAGE_BACKEND="longhorn"
 #STORAGE_BACKEND="openebs"
 STORAGE_LOCATION="/storage"
 STORAGE_REPLICAS=2
-LONGHORN_VERSION="1.5.3"
+LONGHORN_VERSION="1.6.0"
 # LONGHORN_VERSION="1.4.3"
 LONGHORN_CA_ISSUER=$CA_COMPANY-ca-issuer
 MONITORING_NAMESPACE=monitoring
@@ -131,7 +131,7 @@ WEBLATE_REGISTRATION_EMAIL_MATCH='r".*"'
 WEBLATE_GPG_IDENTITY="weblate@weblate.org"
 ############### end of default values
 
-. ~/oci-manage-config.sh
+source ~/oci-manage-config.sh
 
 CLUSTER_DOMAIN=${CLUSTER_HA_FQDN#${CLUSTER_HA_FQDN%%.*}.}
 MASTER_ADMIN_PASSWORD_CRYPTB64=$(openssl passwd -1 $MASTER_ADMIN_PASSWORD | base64)
@@ -494,6 +494,18 @@ function cluster_delete_node() {
     kubectl delete node $NODE_ID
     cluster_reset_member $NODE_ID
   fi
+}
+
+function cluster_reboot_node() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_reboot_node host"
+  else
+    NODE_ID=$1
+    kubectl cordon $NODE_ID
+    kubectl drain --delete-emptydir-data --force --timeout=5s -ignore-daemonsets $NODE_ID
+    ssh root@$NODE_ID "sync && reboot -f && sleep 30 && echo 1 > /proc/sys/kernel/sysrq && echo b > /proc/sysrq-trigger"
+  fi
+
 }
 function cluster_iptables_flush() {
   for MEMBER in $CLUSTER_MEMBERS; do
@@ -4509,6 +4521,7 @@ function cluster_help() {
   echo "cluster_ping_host_from_members:                    ping the given host from each member"
   echo "cluster_ping6_host_from_members:                   ping the given host from each member with IPv6"
   echo "cluster_reboot:                                    reboot all the cluster"
+  echo "cluster_reboot_node:                               reboot a node"
   echo "cluster_reboot_instant:                            reboot a member instantly"
   echo "cluster_reboot_instant_all:                        reboot all the cluster instantly"
   echo "cluster_recreate_private_interface:                recreate all private interface netplan yaml"
