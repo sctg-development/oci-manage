@@ -1,6 +1,6 @@
 #!/bin/bash
 #1-store
-. ./oci-manage
+source $HOME/oci-manage
 if [ -z "${CRYPTOKEN}" ]; then
     echo "CRYPTOKEN is empty: $CRYPTOKEN"
     exit -1

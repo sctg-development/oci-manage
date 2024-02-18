@@ -1,4 +1,5 @@
 #!/bin/bash
+source $HOME/oci-manage
 if [ ! -n "$PROJECT_ROOT" ]; then
     echo "If you restore for a cloned repo you may declare a PROJECT_ROOT environment variable before running this"
     exit 0
