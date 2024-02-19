@@ -3907,9 +3907,14 @@ function cluster_install_qemu_x86_64_for_build() {
 }
 
 function cluster_setup_change_listener() {
-  sudo sed -i 's/--bind-address=127.0.0.1/--bind-address=0.0.0.0/' /etc/kubernetes/manifests/kube-controller-manager.yaml
-  sudo sed -i 's/--bind-address=127.0.0.1/--bind-address=0.0.0.0/' /etc/kubernetes/manifests/kube-scheduler.yaml
-  sudo sed -i "s#--listen-metrics-urls=.*#--listen-metrics-urls=http://127.0.0.1:2381,http://$CONTROL_PLANE_IP:2381#" /etc/kubernetes/manifests/etcd.yaml
+  # get all control planes and change the listener
+  CONTROL_PLANES=$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+  for CONTROL_PLANE_IP in $CONTROL_PLANES; do
+    echo "changing listener for $CONTROL_PLANE_IP"
+    ssh root@$CONTROL_PLANE_IP "sed -i 's/--bind-address=127.0.0.1/--bind-address=0.0.0.0/' /etc/kubernetes/manifests/kube-controller-manager.yaml"
+    ssh root@$CONTROL_PLANE_IP "sed -i 's/--bind-address=127.0.0.1/--bind-address=0.0.0.0/' /etc/kubernetes/manifests/kube-scheduler.yaml"
+    ssh root@$CONTROL_PLANE_IP "sed -i 's#--listen-metrics-urls=.*#--listen-metrics-urls=http://127.0.0.1:2381,http://$CONTROL_PLANE_IP:2381#' /etc/kubernetes/manifests/etcd.yaml"
+  done
 }
 
 function cluster_init_create_post_install_prometheus() {
