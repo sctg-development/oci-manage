@@ -502,7 +502,9 @@ function cluster_reboot_node() {
   else
     NODE_ID=$1
     kubectl cordon $NODE_ID
-    kubectl drain --delete-emptydir-data --force --timeout=5s -ignore-daemonsets $NODE_ID
+    kubectl drain --delete-emptydir-data --force --timeout=5s --ignore-daemonsets $NODE_ID
+    echo "rebooting $NODE_ID in 10s"
+    sleep 10
     ssh root@$NODE_ID "sync && reboot -f && sleep 30 && echo 1 > /proc/sys/kernel/sysrq && echo b > /proc/sysrq-trigger"
   fi
 
@@ -4026,7 +4028,8 @@ grafana:
     enabled: true
     ingressClassName: haproxy
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-azure
+      cert-manager.io/cluster-issuer: $CA_COMPANY-ca-issuer
+      # cert-manager.io/cluster-issuer: letsencrypt-azure
     hosts:
     - grafana.$AZURE_DNS_ZONE
     tls:
