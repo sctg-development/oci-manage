@@ -4442,7 +4442,7 @@ function cluster_control_plane_upgrade() {
       # 2- if yes test upgrade plan
       # 3- if yes apply upgrade
       echo "$CONTROL / $USER"
-      ssh root@$CONTROL "[ -f /home/$USER/miscellaneous/patches/$CONTROL/kube-apiserver+json.json ] && kubeadm upgrade plan && kubeadm upgrade apply v$VERSION"
+      ssh root@$CONTROL "[ -f /home/$USER/miscellaneous/patches/$CONTROL/kube-apiserver+json.json ] && kubeadm upgrade plan && kubeadm upgrade apply --patches /home/$USER/miscellaneous/patches/$CONTROL v$VERSION"
     done
   fi
 }
