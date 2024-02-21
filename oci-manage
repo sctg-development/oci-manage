@@ -3564,18 +3564,18 @@ function get_install_haproxy_ingress_controller() {
   cd "$HOME" || exit
   if [ -d "$HOME/kubernetes-ingress" ]; then
     cd kubernetes-ingress &&
-    git checkout TCPRouteProxyV2 &&
-    git pull
+      git checkout TCPRouteProxyV2 &&
+      git pull
   else
     git clone -b TCPRouteProxyV2 https://github.com/eltorio/kubernetes-ingress &&
-    cd kubernetes-ingress
+      cd kubernetes-ingress
   fi
-    go mod tidy -v &&
+  go mod tidy -v &&
     BUILD_FOR_ARCHS="amd64 arm64"
-    for ARCH in $BUILD_FOR_ARCHS; do
-      echo "Building for $ARCH"
-      GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -v -o kubernetes-ingress-$ARCH . 
-    done
+  for ARCH in $BUILD_FOR_ARCHS; do
+    echo "Building for $ARCH"
+    GOOS=linux GOARCH=$ARCH CGO_ENABLED=0 go build -v -o kubernetes-ingress-$ARCH .
+  done
   for MEMBER in $K8S_CLUSTER; do
     echo "Updating $MEMBER"
     MEMBER_ARCH=$(ssh root@$MEMBER "dpkg --print-architecture")
@@ -4349,7 +4349,7 @@ function crypto_cat() {
   openssl aes-256-cbc -a -d -md sha256 $DECRYPT -in $1 -out -
 }
 
-function crypto_curl(){
+function crypto_curl() {
   DECRYPT=""
   if [ -n "$CRYPTOKEN" ]; then
     DECRYPT="-pass pass:$CRYPTOKEN"
@@ -4399,7 +4399,7 @@ function get_helm() {
   curl -fsSL https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
 }
 
-function install_go(){
+function install_go() {
   VERSION=${1:-"1.21.6"}
   sudo rm -rf /usr/local/go/* && curl -L https://go.dev/dl/go${VERSION}.linux-$(dpkg --print-architecture).tar.gz | sudo tar -C /usr/local -xvz
 }
@@ -4420,7 +4420,7 @@ function get_random_ipv6_rfc4193() {
   echo $CIDR::/48
 }
 
-cluster_control_plane_renew_certificates(){
+cluster_control_plane_renew_certificates() {
   CONTROL_PLANES=$(kubectl get nodes | grep control-plane | awk '{print $1}')
   for CONTROL in $CONTROL_PLANES; do
     echo "********************$CONTROL******************"
@@ -4428,6 +4428,24 @@ cluster_control_plane_renew_certificates(){
   done
 }
 
+#upgrade control planes with patchs
+function cluster_control_plane_upgrade() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_control_plane_upgrade version (ie: 1.29.3)"
+  else
+    VERSION=$1
+    CONTROL_PLANES=$(kubectl get nodes | grep control-plane | awk '{print $1}')
+    for CONTROL in $CONTROL_PLANES; do
+      echo "********************$CONTROL******************"
+      # process to upgrade the control plane
+      # 1- test if patch exists
+      # 2- if yes test upgrade plan
+      # 3- if yes apply upgrade
+      echo "$CONTROL / $USER"
+      ssh root@$CONTROL "[ -f /home/$USER/miscellaneous/patches/$CONTROL/kube-apiserver+json.json ] && kubeadm upgrade plan && kubeadm upgrade apply v$VERSION"
+    done
+  fi
+}
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4440,6 +4458,7 @@ function cluster_help() {
   echo 'cluster_cilium_hostip_cross_ping:                  ping all cilium interfaces'
   echo 'cluster_cloudflare_external_dns:                   create external dns for cloudflare dns 'needs CF_API_KEY and CF_API_EMAIL''
   echo 'cluster_control_plane_renew_certificates:          renew all control plane certificates'
+  echo 'cluster_control_plane_upgrade:                     upgrade control planes with patchs'
   echo 'cluster_copy_dir_as_root:                          copy local dir to remote dir (take care of the trailing slashes)'
   echo 'cluster_copy_file_and_run_as_root:                 copy local file as root to each member and runs it remotely'
   echo 'cluster_copy_file_as_current_user:                 copy local file to each member'
