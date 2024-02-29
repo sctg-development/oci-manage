@@ -3314,13 +3314,22 @@ function cluster_haproxy_reload() {
   cluster_run_on_all_as_root "systemctl reload haproxy ; systemctl reload haproxy-ingress"
 }
 
+function cluster_get_control_planes(){
+ kubectl get nodes --selector node-role.kubernetes.io/control-plane -o jsonpath='{.items[*].metadata.name}'
+}
 function cluster_haproxy_k8s_status() {
-  cluster_run_on_all_as_root "curl -k -s -I https://k8s-api.private:6443/livez"
+  CONTROL_PLANES=$(cluster_get_control_planes)
+  PINGS=""
+  for CONTROL_PLANE in $CONTROL_PLANES;  do
+    PINGS+="ping -4 -c 1 $CONTROL_PLANE > /dev/null && "
+  done
+  cluster_run_on_all_as_root "$PINGS CURL=\$(curl -k -s https://k8s-api.private:6443/livez) && echo \$CURL"
 }
 
 function cluster_haproxy_status() {
   cluster_run_on_all_as_root "systemctl status haproxy-ingress"
 }
+
 function cluster_coredns_get_corefile() {
   kubectl get configmap -n kube-system coredns -o json | jq .data.Corefile | sed -e 's/\\n/\n/g' -e 's/"//g'
 }
@@ -3763,6 +3772,19 @@ function cluster_delete_stucked_namespace() {
   fi
 }
 
+function cluster_delete_stucked_pvc(){
+  if [ "$#" -ne 2 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_delete_stucked_pvc namespace pvc"
+  else
+    NAMESPACE=$1
+    PVC=$2
+    #kubectl patch -n $NAMESPACE pv/$PV -p '{"metadata":{"finalizers":null}}'
+    kubectl patch -n $NAMESPACE pvc/$PVC -p '{"metadata":{"finalizers":null}}'
+    kubectl delete -n $NAMESPACE pvc/$PVC --grace-period=0 --force
+    #kubectl delete -n $NAMESPACE pv/$PV --grace-period=0 --force
+  fi
+
+}
 function cluster_delete_stucked_pods() {
   if [ "$1" -ne 2 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_delete_stucked_pods namespace pod_basename"
@@ -3778,7 +3800,7 @@ function cluster_delete_stucked_pods() {
   fi
 }
 
-function cluster_delete_stucked_pvc() {
+function cluster_delete_stucked_pvc_pv() {
   if [ "$#" -ne 3 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_delete_stucked_pvc namespace pvc pv"
   else
@@ -4493,6 +4515,7 @@ function cluster_help() {
   echo "cluster_etcd_save_backup_s3:                       transfer the last etcd backup to  $S3PATH/etcd-backup-$(date --iso-8601).tar.xz.enc"
   echo 'cluster_get_all_public_ip:                         retrieve all IPv4 and IPv6 of each members by querying $MEMBER.$CLUSTER_DOMAIN'
   echo "cluster_coredns_get_corefile:                      retrieve the coredns Corefile"
+  echo "cluster_get_control_planes:                        retrieve all control planes"
   echo "cluster_get_external_ips:                          retrieve all external addresses of the cluster"
   echo "cluster_get_host_external_ipv4or6:                 retrieve the external ipv4 (with A) or ipv6 (with AAAA) host address"
   echo "cluster_get_traefik_lb_ip:                         get the traefik load balancer external ip"
