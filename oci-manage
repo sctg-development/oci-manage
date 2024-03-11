@@ -1460,7 +1460,7 @@ function cluster_ping_cross_from_members() {
     echo $MEMBER
     COMMAND="HOSTS='$K8S_CLUSTER' ; "
     COMMAND+='for IP in $HOSTS;'
-    COMMAND+='do ping -c1 -W1 $IP | head -n2; done '
+    COMMAND+='do ping -4 -c1 -W1 $IP | head -n2; done '
     ssh $USER@$MEMBER "$COMMAND"
   done
 }
