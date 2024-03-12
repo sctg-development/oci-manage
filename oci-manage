@@ -532,7 +532,7 @@ function cluster_reset_member() {
     echo "Illegal number of parameters:" && echo "    usage cluster_reset_member member"
   else
     MEMBER=$1
-    ssh root@$MEMBER "systemctl stop docker; crictl --runtime-endpoint $CRI_SOCKET rm -a  ; kubeadm reset -f --cleanup-tmp-dir  --ignore-preflight-errors all --cri-socket=$CRI_SOCKET ; \
+    ssh root@$MEMBER "systemctl stop docker; kubeadm reset -f --cleanup-tmp-dir  --ignore-preflight-errors all --cri-socket=$CRI_SOCKET ; \
         rm -rf ~/.ku* ; \
         rm -rf /etc/systemd/system/kubelnet.service.d ; \
         rm -rf /var/lib/kubelet/ ; \
@@ -542,10 +542,16 @@ function cluster_reset_member() {
         rm -rf /var/lib/weave/ ; \
         rm -rf /var/lib/cni ; \
         rm -rf /etc/cni ; \
+        rm -rf /var/log/pods ; \
         docker system prune -a -f ; \
+        crictl --runtime-endpoint $CRI_SOCKET rmi -a ; \
+        crictl --runtime-endpoint $CRI_SOCKET rm -a ; \
+        rm -rf /var/lib/containerd ; \
         rm -rf /root/.kube ; \
         rm -rf /home/$USER/.kube ; \
         rm -f /etc/systemd/resolved.conf.d/k8s-resolve.conf ; \
+        systemctl restart systemd-resolved ; \
+        systemctl restart containerd ; \
         # reboot"
   fi
 }
