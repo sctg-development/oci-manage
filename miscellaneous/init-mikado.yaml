@@ -1,12 +1,3 @@
-#kubeadm init --patches /home/rlemeill/miscellaneous/patches/mikado/ 
-#--ignore-preflight-errors=NumCPU    
-# --pod-network-cidr=172.28.0.0/14,fd27:7741:a145:1369::/64 
-# --service-cidr=172.24.0.0/14,fd27:7741:a145:1370:1::/108     
-# --cri-socket=unix:///run/containerd/containerd.sock     
-# --control-plane-endpoint=k8s-api.private     
-# --node-name mikado     
-# --apiserver-advertise-address=192.168.2.8 
-# --skip-phases=addon/kube-proxy
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: InitConfiguration
 bootstrapTokens:
