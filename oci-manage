@@ -52,6 +52,7 @@ CONTROL_PLANE_PORT=6443
 DNS_PUBLIC_ZONE=example.org
 DOCKER_RUNTIME=containerd
 CILIUM_LB_IP_POOL=172.31.255.0/24
+CILIUM_LB_IP_POOL_V6=fd62:83ce:1203:1234::/64
 KUBE_PROXY_REPLACEMENT=true
 KUBERNET_MAJOR_VERSION=1.29
 HAPROXY_INGRESS_CONTROLLER_VERSION="1.10.8"
@@ -90,7 +91,7 @@ STORAGE_BACKEND="longhorn"
 #STORAGE_BACKEND="openebs"
 STORAGE_LOCATION="/storage"
 STORAGE_REPLICAS=2
-LONGHORN_VERSION="1.6.0"
+LONGHORN_VERSION="1.6.0" #"1.5.4" #"1.6.0"
 # LONGHORN_VERSION="1.4.3"
 LONGHORN_CA_ISSUER=$CA_COMPANY-ca-issuer
 MONITORING_NAMESPACE=monitoring
@@ -129,6 +130,7 @@ WEBLATE_EMAIL_SENDER_HOST="smtp.example.org"
 WEBLATE_EMAIL_SENDER_PORT="587"
 WEBLATE_REGISTRATION_EMAIL_MATCH='r".*"'
 WEBLATE_GPG_IDENTITY="weblate@weblate.org"
+KUBEADM_CONFIG_ADDITIONAL_OPTION=""
 ############### end of default values
 
 source $HOME/oci-manage-config.sh
@@ -572,7 +574,7 @@ function cluster_reset_full() {
 
 function cluster_reset_control_plane() {
   sudo kubeadm reset -f --cri-socket=$CRI_SOCKET &&
-    sudo rm -rf ~/.ku* &&
+    sudo rm -rf $HOME/.ku* &&
     sudo rm -rf /etc/systemd/system/kubelnet.service.d &&
     sudo rm -rf /var/lib/kubelet/ &&
     sudo rm -rf /var/lib/etcd &&
@@ -586,6 +588,7 @@ function cluster_reset_control_plane() {
   sudo rm -f /etc/systemd/resolved.conf.d/k8s-resolve.conf
   sudo systemctl restart systemd-resolved
   sudo rm -rf $HOME/.kube &&
+    sudo rictl -r $CRI_SOCKET rmi -a &&
     sudo reboot
 }
 
@@ -668,6 +671,14 @@ function cluster_cilium_install() {
 
 }
 
+function random_init_token() {
+  part1=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 6 | head -n 1)
+  part2=$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 16 | head -n 1)
+
+  random_string="${part1}.${part2}"
+  echo $random_string
+}
+
 function cluster_init_create_control_plane() {
   REPLACEMENT=disabled
   if [[ "$KUBE_PROXY_REPLACEMENT" == "true" ]]; then
@@ -692,12 +703,16 @@ function cluster_init_create_control_plane() {
     sudo systemctl enable cri-docker.service
     sudo systemctl enable --now cri-docker.socket
   fi
-  KUBEADM_CONFIG="--ignore-preflight-errors=NumCPU \
+  # define ADVERTISE_ADDRESS if it is not defined
+  if [ -z "$ADVERTISE_ADDRESS" ]; then
+    ADVERTISE_ADDRESS=$(/sbin/ip -o -4 addr list eth0 | awk '{print $4}' | cut -d/ -f1)
+  fi
+  KUBEADM_CONFIG="${KUBEADM_CONFIG_ADDITIONAL_OPTION} --ignore-preflight-errors=NumCPU \
     --pod-network-cidr=$KUBERNETES_POD_CIDR --service-cidr=$KUBERNETES_SERVICE_CIDR \
     --cri-socket=$CRI_SOCKET \
     --control-plane-endpoint=$CONTROL_PLANE_INTERNAL_ADDRESS \
     --node-name $HOSTNAME \
-    --apiserver-advertise-address=$(/sbin/ip -o -4 addr list eth0 | awk '{print $4}' | cut -d/ -f1)"
+    --apiserver-advertise-address=$ADVERTISE_ADDRESS"
 
   if [[ "$KUBE_PROXY_REPLACEMENT" == true ]]; then
     KUBEADM_CONFIG+=" --skip-phases=addon/kube-proxy"
@@ -943,18 +958,12 @@ function cluster_init_install_certmanager() {
     helm repo add jetstack https://charts.jetstack.io
     helm repo update
     # kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.3/cert-manager.crds.yaml
-    helm install --create-namespace --namespace=kube-certmanager \
+    helm upgrade --install --create-namespace --namespace=kube-certmanager \
       cert-manager jetstack/cert-manager \
-      --set installCRDs=true
+          --set prometheus.enabled=true \
+          --set webhook.timeoutSeconds=4 \
+          --set installCRDs=true
     cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Namespace
-metadata:
-  creationTimestamp: "$(date --iso-8601=seconds --utc)"
-  labels:
-    kubernetes.io/metadata.name: kube-certmanager
-  name: kube-certmanager
----
 apiVersion: v1
 kind: Secret
 metadata:
@@ -969,6 +978,7 @@ apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: $CA_COMPANY-ca-issuer
+  namespace: kube-certmanager
 spec:
   ca:
     secretName: ca-key-pair
@@ -1066,6 +1076,7 @@ metadata:
 spec:
   cidrs:
   - cidr: $CILIUM_LB_IP_POOL
+  - cidr: $CILIUM_LB_IP_POOL_V6
 EOF
 }
 
@@ -1526,7 +1537,10 @@ function cluster_run_on_all_as_root() {
   if [ "$#" -ne 1 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_run_on_all_members_as_root command"
   else
-    for MEMBER in $K8S_CLUSTER; do
+    # get all nodes with kubectl
+    #MEMBERS=$(kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="Hostname")].address}')
+    MEMBERS="$CLUSTER_MEMBERS $CONTROL_PLANES"
+    for MEMBER in $MEMBERS; do
       echo $MEMBER
       ssh root@$MEMBER $1
     done
@@ -3320,13 +3334,17 @@ function cluster_haproxy_reload() {
   cluster_run_on_all_as_root "systemctl reload haproxy ; systemctl reload haproxy-ingress"
 }
 
-function cluster_get_control_planes(){
- kubectl get nodes --selector node-role.kubernetes.io/control-plane -o jsonpath='{.items[*].metadata.name}'
+function cluster_get_control_planes() {
+  kubectl get nodes --selector node-role.kubernetes.io/control-plane -o jsonpath='{.items[*].metadata.name}'
 }
 function cluster_haproxy_k8s_status() {
   CONTROL_PLANES=$(cluster_get_control_planes)
+  if [ -z "$CONTROL_PLANES" ]; then
+    echo "No control plane found defaulting to $CLUSTER_MEMBERS $CONTROL_PLANES"
+    CONTROL_PLANES="$CLUSTER_MEMBERS $CONTROL_PLANES"
+  fi
   PINGS=""
-  for CONTROL_PLANE in $CONTROL_PLANES;  do
+  for CONTROL_PLANE in $CONTROL_PLANES; do
     PINGS+="ping -4 -c 1 $CONTROL_PLANE > /dev/null && "
   done
   cluster_run_on_all_as_root "$PINGS CURL=\$(curl -k -s https://k8s-api.private:6443/livez) && echo \$CURL"
@@ -3778,7 +3796,7 @@ function cluster_delete_stucked_namespace() {
   fi
 }
 
-function cluster_delete_stucked_pvc(){
+function cluster_delete_stucked_pvc() {
   if [ "$#" -ne 2 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_delete_stucked_pvc namespace pvc"
   else

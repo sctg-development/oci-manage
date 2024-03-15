@@ -1,0 +1,65 @@
+#kubeadm init --patches /home/rlemeill/miscellaneous/patches/mikado/ 
+#--ignore-preflight-errors=NumCPU    
+# --pod-network-cidr=172.28.0.0/14,fd27:7741:a145:1369::/64 
+# --service-cidr=172.24.0.0/14,fd27:7741:a145:1370:1::/108     
+# --cri-socket=unix:///run/containerd/containerd.sock     
+# --control-plane-endpoint=k8s-api.private     
+# --node-name mikado     
+# --apiserver-advertise-address=192.168.2.8 
+# --skip-phases=addon/kube-proxy
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+bootstrapTokens:
+- groups:
+  - system:bootstrappers:kubeadm:default-node-token
+  token: 5i8o7g.nlhyb1wl6ydy2f23
+  ttl: 24h0m0s
+  usages:
+  - signing
+  - authentication
+localAPIEndpoint:
+  advertiseAddress: 192.168.2.8
+  bindPort: 6443
+nodeRegistration:
+  criSocket: "unix:///run/containerd/containerd.sock"
+  imagePullPolicy: IfNotPresent
+  name: "mikado"
+  taints: null
+skipPhases:
+  - addon/kube-proxy
+patches:
+  directory: /home/rlemeill/miscellaneous/patches/mikado
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+certificatesDir: /etc/kubernetes/pki
+clusterName: kubernetes
+controllerManager: {}
+dns: {}
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+imageRepository: registry.k8s.io
+kubernetesVersion: 1.29.2
+controlPlaneEndpoint: k8s-api.private
+apiServer:
+  certSANs:
+  - 192.168.2.8
+  - 10.254.0.4
+  - 10.10.0.235
+  - k8s-api.private
+  - k8s-api.k-cloud.pp.ua
+  - k8s-api.ikms.pp.ua
+  - k8s-api.vkms.pp.ua
+  - k8s-api.oci.sctg.eu.org
+  - mikado
+  - mikado.lesmuids.windows
+  - azure-gypaete
+  - azure-gypaete.azure-oci.private
+  - azure-gypaete.oci.sctg.eu.org
+
+networking:
+  dnsDomain: cluster.local
+  podSubnet: "172.28.0.0/14,fd27:7741:a145:1369::/64"
+  serviceSubnet: "172.24.0.0/14,fd27:7741:a145:1370::/108"
+scheduler: {}
