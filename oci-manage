@@ -4495,6 +4495,40 @@ function cluster_control_plane_upgrade() {
     done
   fi
 }
+
+# Example usage of the function:
+# cluster_extract_tls_secret "my-namespace" "my-tls-secret" > cert.pem
+cluster_extract_tls_secret() {
+    local namespace="$1"
+    local secret_name="$2"
+
+    if [[ -z "$namespace" || -z "$secret_name" ]]; then
+        echo "Usage: extract_tls_secret <namespace> <secret_name>" >&2
+        return 1
+    fi
+
+    # Extract secret data
+    local secret_data
+    secret_data=$(kubectl -n "$namespace" get secret/"$secret_name" -o yaml)
+
+    if [[ $? -ne 0 ]]; then
+        echo "Error extracting the secret. Check the secret name and namespace." >&2
+        return 1
+    fi
+
+    # Extract and decode tls.crt
+    local tls_crt
+    tls_crt=$(echo "$secret_data" | grep 'tls.crt' | tail -n1 | awk '{print $2}' | base64 -d)
+
+    # Extract and decode tls.key
+    local tls_key
+    tls_key=$(echo "$secret_data" | grep 'tls.key' | tail -n1 | awk '{print $2}' | base64 -d)
+
+    # Output the data to stdout
+    echo "$tls_crt"
+    echo "$tls_key"
+}
+
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4540,6 +4574,7 @@ function cluster_help() {
   echo "cluster_etcd_snapshot:                             create and encrypt a etcd snapshot (pass=$CRYPTOKEN)"
   echo "cluster_etcd_get_member_list:                      get the etcd member list"
   echo "cluster_etcd_save_backup_s3:                       transfer the last etcd backup to  $S3PATH/etcd-backup-$(date --iso-8601).tar.xz.enc"
+  echo "cluster_extract_tls_secret:                        extract cert from secret and its datas tls.cert, tls.key"
   echo 'cluster_get_all_public_ip:                         retrieve all IPv4 and IPv6 of each members by querying $MEMBER.$CLUSTER_DOMAIN'
   echo "cluster_coredns_get_corefile:                      retrieve the coredns Corefile"
   echo "cluster_get_control_planes:                        retrieve all control planes"
