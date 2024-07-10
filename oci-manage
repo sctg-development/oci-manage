@@ -3861,7 +3861,7 @@ persistence:
   size: 10Gi
   accessMode: ReadWriteMany
 image:
-  tag: '5.3'
+  tag: '5.6'
 replicaCount: 1
 adminEmail: '$WEBLATE_EMAIL'
 adminUser: '$WEBLATE_ADMIN'
@@ -3875,6 +3875,7 @@ serverEmail: $WEBLATE_EMAIL_SENDER'
 configOverride: |
   REGISTRATION_EMAIL_MATCH = $WEBLATE_REGISTRATION_EMAIL_MATCH
   WEBLATE_GPG_IDENTITY = "$WEBLATE_GPG_IDENTITY"
+  IP_BEHIND_REVERSE_PROXY = True
   ENABLE_HTTPS = True
   SESSION_COOKIE_SECURE = ENABLE_HTTPS
   SECURE_SSL_REDIRECT = ENABLE_HTTPS
@@ -3882,6 +3883,16 @@ configOverride: |
   SECURE_HSTS_INCLUDE_SUBDOMAINS = ENABLE_HTTPS
   SECURE_HSTS_SECONDS = 3600
   BORG_EXTRA_ARGS = ["--exclude", "lost+found","--exclude", "/app/data/lost+found"]
+  AUTHENTICATION_BACKENDS = (
+    "social_core.backends.github.GithubOAuth2",
+    "social_core.backends.email.EmailAuth",
+    "weblate.accounts.auth.WeblateUserBackend",
+    )
+  SOCIAL_AUTH_GITHUB_KEY = "$WEBLATE_SOCIAL_AUTH_GITHUB_KEY"
+  SOCIAL_AUTH_GITHUB_SECRET = "$WEBLATE_SOCIAL_AUTH_GITHUB_SECRET"
+  SOCIAL_AUTH_GITHUB_SCOPE = ["user:email"]
+  DEFAULT_COMMITER_EMAIL = '$WEBLATE_EMAIL_SENDER'
+  DEFAULT_COMMITER_NAME = '$WEBLATE_DEFAULT_COMMITER_NAME'
 emailSSL: false
 emailTLS: true
 livenessProbe:
