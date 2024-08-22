@@ -3894,6 +3894,7 @@ configOverride: |
   SOCIAL_AUTH_GITHUB_SCOPE = ["user:email"]
   DEFAULT_COMMITER_EMAIL = '$WEBLATE_EMAIL_SENDER'
   DEFAULT_COMMITER_NAME = '$WEBLATE_DEFAULT_COMMITER_NAME'
+  INSTALLED_APPS += ("weblate.billing",)
 emailSSL: false
 emailTLS: true
 livenessProbe:
@@ -4541,6 +4542,19 @@ cluster_extract_tls_secret() {
     echo "$tls_key"
 }
 
+# This function split a file in multiple parts, each part have a maximum size of 50M
+# the original file extension is preserved and the parts are named with the original file name and a number
+function split_file_in_50M() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage split_file file"
+  else
+    FILE=$1
+    SPLIT_SIZE=50M
+    BASENAME=$(basename $FILE)
+    BASENAME+="."
+    split -b $SPLIT_SIZE $FILE $BASENAME
+  fi
+}
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4715,6 +4729,7 @@ function cluster_help() {
   echo "oci_list_instance_running:                         list all running instances given a tenancy and a compartment ocid"
   echo "oci_list_vcn:                                      get the vcn given a tenancy and a compartment ocid"
   echo "oci-manage-copyright:                              shows copyright"
+  echo "split_file_in_50M:                                 split a file in multiple parts, each part have a maximum size of 50M"
   echo "wg_meshconf_addpeer:                               add wireguard peer"
   echo "wg_meshconf_apt_dist_upgrade:                      Launch apt update && apt -y dist-upgrade on each wireguard peers"
   echo "wg_meshconf_deploy_config:                         generate and deploy wireguard mesh network"
