@@ -4555,6 +4555,19 @@ function split_file_in_50M() {
     split -b $SPLIT_SIZE $FILE $BASENAME
   fi
 }
+
+function cluster_extract_certificate_from_k8s(){
+  if [ "$#" -ne 2 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_extract_certificate_from_k8s namespace secret"
+  else
+    TEMPFILE=$(mktemp)
+    kubectl get secret $2 -n $1 -o jsonpath='{.data.tls\.crt}' | base64 -d > $TEMPFILE
+    kubectl get secret $2 -n $1 -o jsonpath='{.data.tls\.key}' | base64 -d >> $TEMPFILE
+    cat $TEMPFILE
+    rm -f $TEMPFILE
+  fi
+}
+
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4588,6 +4601,7 @@ function cluster_help() {
   echo 'cluster_docker_prune:                              recover some orphaned on docker'
   echo 'cluster_docker_install_qemu:                       install needs for buildkit'
   echo 'cluster_delete_member:                             delete gracefully a member from the cluster'
+  echo 'cluster_extract_certificate_from_k8s:              extract tls.crt and tls.key from a k8s secret'
   echo "member_enable_sysctl_value:                        set to 1 a arbitrary sysctl.conf value"
   echo "member_disable_sysctl_value:                       set to 0 a arbitrary sysctl.conf value"
   echo "cluster_enable_sysctl_value:                       set to 1 a arbitrary sysctl.conf value"
