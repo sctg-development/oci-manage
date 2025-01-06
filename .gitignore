@@ -56,3 +56,7 @@ iptables/rules.v4
 .cargo
 .rustup
 .nvm
+backups/*.xz
+backups/*.zip
+backups/*.gz
+backups/*.bz2
