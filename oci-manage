@@ -3919,7 +3919,7 @@ ingress:
 #   image:
 #     debug: true
 #     registry: docker.io
-#     tag: 15-to-16
+#     tag: 16-to-17
 #     repository: highcanfly/postgres-upgrade
 #     pullPolicy: Always
 #   diagnosticMode:
