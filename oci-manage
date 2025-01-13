@@ -3861,7 +3861,7 @@ persistence:
   size: 10Gi
   accessMode: ReadWriteMany
 image:
-  tag: '5.8'
+  tag: '5.9'
 replicaCount: 1
 adminEmail: '$WEBLATE_EMAIL'
 adminUser: '$WEBLATE_ADMIN'
