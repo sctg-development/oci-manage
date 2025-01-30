@@ -510,8 +510,38 @@ function cluster_reboot_node() {
     sleep 10
     ssh root@$NODE_ID "sync && reboot -f && sleep 30 && echo 1 > /proc/sys/kernel/sysrq && echo b > /proc/sysrq-trigger"
   fi
-
 }
+
+function cluster_node_enable() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_node_enable host"
+    return 1
+  fi
+
+  NODE_ID=$1
+  echo "Waiting for node $NODE_ID to be Ready..."
+  
+  # Wait for node to be Ready with timeout of 5 minutes
+  TIMEOUT=300
+  while [ $TIMEOUT -gt 0 ]; do
+    STATUS=$(kubectl get node $NODE_ID -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}')
+    if [ "$STATUS" == "True" ]; then
+      echo "Node $NODE_ID is Ready"
+      break
+    fi
+    sleep 5
+    ((TIMEOUT-=5))
+  done
+
+  if [ $TIMEOUT -eq 0 ]; then
+    echo "Timeout waiting for node $NODE_ID to be Ready"
+    return 1
+  fi
+
+  echo "Uncordoning node $NODE_ID..."
+  kubectl uncordon $NODE_ID
+}
+
 function cluster_iptables_flush() {
   for MEMBER in $CLUSTER_MEMBERS; do
     echo $MEMBER
@@ -4568,6 +4598,10 @@ function cluster_extract_certificate_from_k8s(){
   fi
 }
 
+function git_prune_local_repo() {
+  git fetch --depth=1 && git reflog expire --expire-unreachable=now --all && git gc --aggressive --prune=all
+}
+
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4667,6 +4701,7 @@ function cluster_help() {
   echo "cluster_minio_install_mc_all:                      install minio cli on all members"
   echo "cluster_imagefs_available_free_size:               get imagefs available on each nodes"
   echo "cluster_needrestart:                               run needrestart on all members"
+  echo "cluster_node_enable:                               enable a node after reboot"
   echo "cluster_nodefs_free_size:                          get free nodefs"
   echo "cluster_ping_host_from_members:                    ping the given host from each member"
   echo "cluster_ping6_host_from_members:                   ping the given host from each member with IPv6"
