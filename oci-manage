@@ -3891,7 +3891,7 @@ persistence:
   size: 10Gi
   accessMode: ReadWriteMany
 image:
-  tag: '5.9'
+  tag: '5.10'
 replicaCount: 1
 adminEmail: '$WEBLATE_EMAIL'
 adminUser: '$WEBLATE_ADMIN'
@@ -4602,6 +4602,20 @@ function git_prune_local_repo() {
   git fetch --depth=1 && git reflog expire --expire-unreachable=now --all && git gc --aggressive --prune=all
 }
 
+function cluster_extract_local_kube_config_from_kubelet(){
+  KUBELET_CONF_CERTIFICATE_AUTHORITY_DATA=$(sudo bash -c "yq '.clusters[0].cluster.certificate-authority-data' /etc/kubernetes/super-admin.conf")
+  KUBELET_CONF_SERVER=$(sudo bash -c "yq '.clusters[0].cluster.server' /etc/kubernetes/super-admin.conf")
+  KUBELET_CONF_CLIENT_CERTIFICATE=$(sudo bash -c "yq '.users[0].user.client-certificate-data' /etc/kubernetes/super-admin.conf")
+  KUBELET_CONF_CLIENT_KEY=$(sudo bash -c "yq '.users[0].user.client-key-data' /etc/kubernetes/super-admin.conf")
+  
+
+  
+  # Modifier le fichier .kube/config en utilisant yq
+  yq e -i '.clusters[0].cluster.certificate-authority-data = "'$KUBELET_CONF_CERTIFICATE_AUTHORITY_DATA'"' .kube/config
+  yq e -i '.users[0].user.client-key-data = "'$KUBELET_CONF_CLIENT_KEY'"' .kube/config
+  yq e -i '.users[0].user.client-certificate-data = "'$KUBELET_CONF_CLIENT_CERTIFICATE'"' .kube/config
+}
+
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4636,6 +4650,7 @@ function cluster_help() {
   echo 'cluster_docker_install_qemu:                       install needs for buildkit'
   echo 'cluster_delete_member:                             delete gracefully a member from the cluster'
   echo 'cluster_extract_certificate_from_k8s:              extract tls.crt and tls.key from a k8s secret'
+  echo 'cluster_extract_local_kube_config_from_kubelet     extract the kube config from the kubelet'
   echo "member_enable_sysctl_value:                        set to 1 a arbitrary sysctl.conf value"
   echo "member_disable_sysctl_value:                       set to 0 a arbitrary sysctl.conf value"
   echo "cluster_enable_sysctl_value:                       set to 1 a arbitrary sysctl.conf value"
