@@ -4357,8 +4357,18 @@ function cluster_untaint_disk_pressure_all() {
   for MEMBER in $(kubectl get nodes -ojson | jq -r '.items[] | .metadata.name '); do
     kubectl taint nodes $MEMBER node.kubernetes.io/disk-pressure-
   done
-
 }
+
+function cluster_untaint_all() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_untaint_all taint"
+  else
+    for MEMBER in $(kubectl get nodes -ojson | jq -r '.items[] | .metadata.name '); do
+      kubectl taint nodes $MEMBER $1-
+    done
+  fi
+}
+
 function cluster_memory_free_size() {
   cluster_run_on_all_as_root "free -hm | awk 'NR==2{print \$7}'"
 }
@@ -4756,6 +4766,7 @@ function cluster_help() {
   echo "cluster_traefik_launch_simple_proxy:               lauche simpleproxy from private ip to traefik loadbalancer"
   echo "cluster_update_k8s_pause:                          update registry.k8s.io/pause to the given version"
   echo "cluster_untaint_disk_pressure_all:                 untaint all disk pressure"
+  echo "cluster_untaint_all:                               untaint something on all the cluster"
   echo "crypto_cat:                                        decrypt a file with openssl"
   echo "crypto_curl:                                       decrypt a curl url with openssl"
   echo "create_admin_user_with_key:                        create an admin user with its home directory and a ssh key"
