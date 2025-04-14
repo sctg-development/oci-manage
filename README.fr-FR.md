@@ -441,9 +441,9 @@ Et tous les pods systèmes fonctionnent:
 ```sh
 kubectl get pods -A
 NAMESPACE              NAME                                                                 READY   STATUS    RESTARTS       AGE
-kube-certmanager       cert-manager-64f9f45d6f-8x7qw                                        1/1     Running   1 (28m ago)    3h
-kube-certmanager       cert-manager-cainjector-56bbdd5c47-h2fs9                             1/1     Running   1 (27m ago)    3h
-kube-certmanager       cert-manager-webhook-d4f4545d7-qfmmp                                 1/1     Running   1 (27m ago)    3h
+cert-manager       cert-manager-64f9f45d6f-8x7qw                                        1/1     Running   1 (28m ago)    3h
+cert-manager       cert-manager-cainjector-56bbdd5c47-h2fs9                             1/1     Running   1 (27m ago)    3h
+cert-manager       cert-manager-webhook-d4f4545d7-qfmmp                                 1/1     Running   1 (27m ago)    3h
 kube-system            cilium-6qsgm                                                         1/1     Running   1 (28m ago)    3h
 kube-system            cilium-7lqvn                                                         1/1     Running   1 (28m ago)    3h
 kube-system            cilium-b52hq                                                         1/1     Running   1 (29m ago)    3h
@@ -662,7 +662,7 @@ dev_install_local_registry
 ```sh
 docker push docker-registry.local/cert-manage-webhook-oci:1.3.0.2
 #et l'utiliser
-helm install --namespace kube-certmanager cert-manager-webhook-oci deploy/cert-manager-webhook-oci --set image.repository=docker-registry.local/cert-manage-webhook-oci --set image.tag=1.3.0.2
+helm install --namespace cert-manager cert-manager-webhook-oci deploy/cert-manager-webhook-oci --set image.repository=docker-registry.local/cert-manage-webhook-oci --set image.tag=1.3.0.2
 ```
 ### 6.11.3. Pour désinstaller le registre local:
 ```
@@ -683,7 +683,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: test.myocihostedzone.org
-  namespace: kube-certmanager
+  namespace: cert-manager
 spec:
   commonName: test.myocihostedzone.org
   dnsNames:
@@ -731,7 +731,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: test.example.org
-  namespace: kube-certmanager
+  namespace: cert-manager
 spec:
   commonName: test.example.org
   dnsNames:

@@ -37,10 +37,11 @@ CF_API_EMAIL="user@example.org"
 CF_DOMAINS=("example.org" "example.com")
 CLUSTER_AS=4201234567
 CLUSTER_MEMBERS='node2 node3 node4 node5 node6 node7 node8'
+CERT_MANAGER_VERSION="v1.17.1"
 CILIUM_CLUSTER_POOL_IPV4_KUBERNETES_POD_CIDR=172.24.0.0/13
 CILIUM_CLUSTER_POOL_IPV6_KUBERNETES_POD_CIDR=fd62:83ce:1203:1234::/64
 #CILIUM_VERSION="v1.15.1" #"v1.14.6"
-CILIUM_VERSION="v1.14.8"
+CILIUM_VERSION="v1.17.2" #"v1.14.8"
 CLUSTER_HA_FQDN=ha.fqdn.com
 CONTROL_PLANE_INTERNAL_ADDRESS=master.private.fqdn.com
 ROUTING_MEMBER='oci-router'
@@ -55,7 +56,7 @@ DOCKER_RUNTIME=containerd
 CILIUM_LB_IP_POOL=172.31.255.0/24
 CILIUM_LB_IP_POOL_V6=fd62:83ce:1203:1234::/64
 KUBE_PROXY_REPLACEMENT=true
-KUBERNET_MAJOR_VERSION=1.29
+KUBERNET_MAJOR_VERSION=1.30
 HAPROXY_INGRESS_CONTROLLER_VERSION="1.10.8"
 LETSENCRYPT_USER="user@example.com"
 OCI_DB=~/oci.json
@@ -92,8 +93,7 @@ STORAGE_BACKEND="longhorn"
 #STORAGE_BACKEND="openebs"
 STORAGE_LOCATION="/storage"
 STORAGE_REPLICAS=2
-LONGHORN_VERSION="1.6.2" #"1.5.4" #"1.6.0"
-# LONGHORN_VERSION="1.4.3"
+LONGHORN_VERSION="1.8.1" #"1.6.4" #"1.6.2" #"1.5.4" #"1.6.0"
 LONGHORN_CA_ISSUER=$CA_COMPANY-ca-issuer
 MONITORING_NAMESPACE=monitoring
 GRAFANA_AGENT_VERSION="v0.32.1"
@@ -134,12 +134,13 @@ WEBLATE_GPG_IDENTITY="weblate@weblate.org"
 KUBEADM_CONFIG_ADDITIONAL_OPTION=""
 ############### end of default values
 
+K8S_CLUSTER="$CLUSTER_MEMBERS $CONTROL_PLANE_LOCAL"
+K8S_CLUSTER_LONG="$CLUSTER_MEMBERS $CONTROL_PLANE_INTERNAL_ADDRESS"
 source $HOME/oci-manage-config.sh
 
 CLUSTER_DOMAIN=${CLUSTER_HA_FQDN#${CLUSTER_HA_FQDN%%.*}.}
 MASTER_ADMIN_PASSWORD_CRYPTB64=$(openssl passwd -1 $MASTER_ADMIN_PASSWORD | base64)
-K8S_CLUSTER="$CLUSTER_MEMBERS $CONTROL_PLANE_LOCAL"
-K8S_CLUSTER_LONG="$CLUSTER_MEMBERS $CONTROL_PLANE_INTERNAL_ADDRESS"
+
 DASHBOARD_DNS_NAMES_JS=$(
   RES=""
   for NAME in "${DASHBOARD_DNS_NAMES[@]}"; do RES+="$NAME,"; done
@@ -677,7 +678,7 @@ function cluster_cilium_install() {
   fi
   CILIUM_CONFIG="--set envoy.enabled=$KUBE_PROXY_REPLACEMENT --set k8sServiceHost=$CONTROL_PLANE_IP \
       --set k8sServicePort=$CONTROL_PLANE_PORT \
-      --set $IPAM --set tunnel=vxlan \
+      --set $IPAM --set routingMode=tunnel \
       --set ipv6.enabled=false \
       --set bpf.masquerade=true \
       --set bgpControlPlane.enabled=false \
@@ -687,6 +688,7 @@ function cluster_cilium_install() {
       --set hubble.ui.enabled=true \
       --set prometheus.enabled=true \
       --set operator.prometheus.enabled=true \
+      --set kubeProxyReplacement=true
       --version $CILIUM_VERSION "
   if [[ "$1" == "UNINSTALL" ]]; then
     helm uninstall cilium --namespace=kube-system
@@ -989,11 +991,7 @@ function cluster_init_install_certmanager() {
     helm repo add jetstack https://charts.jetstack.io
     helm repo update
     # kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.3/cert-manager.crds.yaml
-    helm upgrade --install --create-namespace --namespace=kube-certmanager \
-      cert-manager jetstack/cert-manager \
-          --set prometheus.enabled=true \
-          --set webhook.timeoutSeconds=4 \
-          --set installCRDs=true
+    helm upgrade --install   cert-manager jetstack/cert-manager   --namespace kube-certmanager   --create-namespace   --set crds.enabled=true --set crds.keep=false --set startupapicheck.enabled=true --version $CERT_MANAGER_VERSION --set prometheus.enabled=true
     cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Secret
@@ -1017,6 +1015,32 @@ EOF
   fi
 }
 
+function cluster_init_install_cluster_issuer() {
+  if [ "$#" -ne 0 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_init_install_cluster_issuer"
+  else
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ca-key-pair
+  namespace: kube-certmanager
+data:
+    # cat ca.test.com.cer | base64 | tr -d '\n'
+  tls.crt: $CA
+  tls.key: $CA_KEY
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: $CA_COMPANY-ca-issuer
+  namespace: kube-certmanager
+spec:
+  ca:
+    secretName: ca-key-pair
+EOF
+  fi
+}
 function cluster_init_install_dashboard() {
   if [ "$#" -ne 0 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_init_install_dashboard"
@@ -2120,7 +2144,7 @@ function cluster_init_create_post_install_grafana_v3() {
       helm repo add grafana https://grafana.github.io/helm-charts &&
         helm repo update grafana &&
         helm upgrade --install --create-namespace grafana-k8s-monitoring grafana/k8s-monitoring \
-          --namespace "$NAMESPACE" --values - <<EOF
+          --namespace "$NAMESPACE" --version ^1 --values - <<EOF
 cluster:
   name: $GRAFANA_CLUSTER_NAME
 externalServices:
@@ -2138,7 +2162,8 @@ metrics:
   cost:
     enabled: false
   node-exporter:
-    allowList:
+    metricsTuning:
+      includeMetrics:
         - node_cpu.*
         - node_exporter_build_info
         - node_filesystem.*
@@ -3027,11 +3052,11 @@ function cluster_init_get_cilium_cli() {
 }
 
 function cluster_reset_remove_oci_dns_issuer() {
-  helm uninstall --namespace kube-certmanager cert-manager-webhook-oci
-  kubectl delete -n kube-certmanager secret/oci-profile
-  kubectl delete -n kube-certmanager secret/letsencrypt-oci
-  kubectl delete -n kube-certmanager secret/letsencrypt-staging-oci
-  kubectl delete -n kube-certmanager secret/cert-manager-webhook-oci-ca
+  helm uninstall --namespace cert-manager cert-manager-webhook-oci
+  kubectl delete -n cert-manager secret/oci-profile
+  kubectl delete -n cert-manager secret/letsencrypt-oci
+  kubectl delete -n cert-manager secret/letsencrypt-staging-oci
+  kubectl delete -n cert-manager secret/cert-manager-webhook-oci-ca
   kubectl delete ClusterIssuer/letsencrypt-staging-oci
   kubectl delete ClusterIssuer/letsencrypt-oci
 }
@@ -3039,8 +3064,8 @@ function cluster_reset_remove_oci_dns_issuer() {
 function cluster_init_install_oci_dns_issuer() {
   helm repo add highcanfly https://helm-repo.highcanfly.club/
   helm repo update
-  helm install --namespace kube-certmanager cert-manager-webhook-oci highcanfly/cert-manager-webhook-oci
-  cat <<EOF | kubectl apply -n kube-certmanager -f -
+  helm install --namespace cert-manager cert-manager-webhook-oci highcanfly/cert-manager-webhook-oci
+  cat <<EOF | kubectl apply -n cert-manager -f -
 apiVersion: v1
 kind: Secret
 metadata:
@@ -3108,8 +3133,8 @@ function azure_install_cli() {
 }
 
 function cluster_reset_remove_azure_dns_issuer() {
-  kubectl delete -n kube-certmanager secret/letsencrypt-azure
-  kubectl delete -n kube-certmanager secret/letsencrypt-staging-azure
+  kubectl delete -n cert-manager secret/letsencrypt-azure
+  kubectl delete -n cert-manager secret/letsencrypt-staging-azure
   kubectl delete ClusterIssuer/letsencrypt-staging-azure
   kubectl delete ClusterIssuer/letsencrypt-azure
 }
@@ -3843,7 +3868,7 @@ function cluster_delete_stucked_pvc() {
 
 }
 function cluster_delete_stucked_pods() {
-  if [ "$1" -ne 2 ]; then
+  if [ "$#" -ne 2 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_delete_stucked_pods namespace pod_basename"
   else
     NAMESPACE=$1
@@ -3886,10 +3911,10 @@ function cluster_install_weblate() {
   helm repo add weblate https://helm.weblate.org
   helm repo update weblate
   cat <<EOF >/tmp/weblate.yaml
-debug: '1'
+debug: '0'
 persistence:
   size: 10Gi
-  accessMode: ReadWriteMany
+  accessMode: ReadWriteOnce
 image:
   tag: '5.10'
 replicaCount: 1
@@ -4013,6 +4038,7 @@ function cluster_init_create_post_install_prometheus() {
   API_TOKEN=$(cat /proc/sys/kernel/random/uuid)
   echo "ATTENTION password for apitoken='$API_TOKEN'"
   echo "you will never see it, please note it"
+  echo "apitoken='$API_TOKEN'" >> production/monitoring-api-token
   cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Namespace
@@ -4039,6 +4065,22 @@ EOF
   UUID=$(cat /proc/sys/kernel/random/uuid)
   mkdir -p /tmp/$UUID
   cat <<EOF >/tmp/$UUID/values.yaml
+crds:
+  enabled: true
+  upgradeJob:
+    enabled: false
+    forceConflicts: false
+prometheusOperator:
+  enabled: true
+  admissionWebhooks:
+    deployment:
+        enabled: true
+    enabled: true
+    certManager:
+      enabled: true
+      issuerRef:
+         name: "$CA_COMPANY-ca-issuer"
+         kind: "ClusterIssuer"
 prometheus:
   additionalServiceMonitors:
     - name: cilium-envoy
@@ -4228,7 +4270,7 @@ grafana:
         access: proxy
         isDefault: true
 EOF
-  helm upgrade --install --namespace $MONITORING_NAMESPACE prometheus prometheus-community/kube-prometheus-stack --values /tmp/$UUID/values.yaml
+  helm upgrade --install --namespace $MONITORING_NAMESPACE --create-namespace prometheus prometheus-community/kube-prometheus-stack --values /tmp/$UUID/values.yaml
   rm -rf /tmp/$UUID
 }
 
@@ -4626,6 +4668,34 @@ function cluster_extract_local_kube_config_from_kubelet(){
   yq e -i '.users[0].user.client-certificate-data = "'$KUBELET_CONF_CLIENT_CERTIFICATE'"' .kube/config
 }
 
+function cluster_delete_all_crd() {
+  #exemple: kubectl delete crd $(kubectl get CustomResourceDefinition | grep cert-manager.io | awk '{print $1}')
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_delete_all_crd crd_base_name"
+    echo "    example: cluster_delete_all_crd cert-manager.io"
+  else
+    CRD=$1
+    kubectl get CustomResourceDefinition | grep $CRD | awk '{print $1}' | xargs -I {} kubectl delete crd {} --grace-period=0 --force 
+  fi
+}
+function cluster_delete_all_cluster_role() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_delete_all_cluster_role cluster_role_base_name"
+    echo "    example: cluster_delete_all_cluster_role cert-manager"
+  else
+    CLUSTER_ROLE=$1
+    kubectl get ClusterRole | grep $CLUSTER_ROLE | awk '{print $1}' | xargs -I {} kubectl delete ClusterRole {}
+  fi
+}
+function cluster_delete_all_cluster_role_binding() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_delete_all_cluster_role_binding cluster_role_base_name"
+    echo "    example: cluster_delete_all_cluster_role_binding cert-manager"
+  else
+    CLUSTER_ROLE=$1
+    kubectl get ClusterRoleBinding | grep $CLUSTER_ROLE | awk '{print $1}' | xargs -I {} kubectl delete ClusterRoleBinding {}
+  fi
+}
 function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
@@ -4647,6 +4717,9 @@ function cluster_help() {
   echo 'cluster_create_ingress_cloudflare:                 Create an ingress with letsencrypt certificate and create a CNAME on cloudflare'
   echo 'cluster_create_local_registry_secret:              create a secret named local-registry-credential containing login to local registry'
   echo 'cluster_delete_node:                               delete a k8s node'
+  echo 'cluster_delete_all_crd:                            delete all crd with a specific base name'
+  echo 'cluster_delete_all_cluster_role:                   delete all cluster role with a specific base name'
+  echo 'cluster_delete_all_cluster_role_binding:           delete all cluster role binding with a specific base name'
   echo 'cluster_delete_stucked_namespace:                  delete a namespace stucked on terminating (perhaps leaving dangling resources)'
   echo 'cluster_delete_stucked_pods:                       delete pods in a spoecified namespace stucked in terminatig state'
   echo 'cluster_delete_stucked_pvc:                        delete stucked pvc/pc (you probably need to run it twice)'
