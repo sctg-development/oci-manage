@@ -1815,6 +1815,20 @@ function cluster_ping_host_from_members() {
   fi
 }
 
+function cluster_ping4_host_from_members() {
+  if [ "$#" -ne 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_ping4_host_from_members host"
+  else
+    HOST=$1
+    for MEMBER in $CLUSTER_MEMBERS; do
+      echo "From $MEMBER to $HOST"
+      ssh $USER@$MEMBER "ping -4 -c1 $HOST"
+    done
+    echo "From localhost to $HOST"
+    ping -c1 $HOST
+  fi
+}
+
 function cluster_ping6_host_from_members() {
   if [ "$#" -ne 1 ]; then
     echo "Illegal number of parameters:" && echo "    usage cluster_ping6_host_from_members host"
@@ -4802,6 +4816,7 @@ function cluster_help() {
   echo "cluster_node_enable:                               enable a node after reboot"
   echo "cluster_nodefs_free_size:                          get free nodefs"
   echo "cluster_ping_host_from_members:                    ping the given host from each member"
+  echo "cluster_ping4_host_from_members:                   ping the given host from each member with IPv4"
   echo "cluster_ping6_host_from_members:                   ping the given host from each member with IPv6"
   echo "cluster_reboot:                                    reboot all the cluster"
   echo "cluster_reboot_node:                               reboot a node"

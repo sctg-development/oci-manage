@@ -20,3 +20,5 @@ spec:
     args: ["-c", "cd ~/ && touch file.txt && mknod -m 777 fifo p && cat fifo | netcat -k -l 8000 > fifo && sleep infinity"]
   hostNetwork: false
   dnsPolicy: ClusterFirst
+  nodeSelector:
+    kubernetes.io/hostname: "oci-circaete.private.entreve.oraclevcn.com"
