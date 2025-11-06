@@ -3426,6 +3426,10 @@ function cluster_haproxy_status() {
   cluster_run_on_all_as_root "systemctl status haproxy-ingress"
 }
 
+function cluster_haproxy_copy_kubeconfig_to_all_root() {
+  cluster_copy_file_as_root /$HOME/.kube/config /etc/haproxy-ingress/kubeconfig
+}
+
 function cluster_coredns_get_corefile() {
   kubectl get configmap -n kube-system coredns -o json | jq .data.Corefile | sed -e 's/\\n/\n/g' -e 's/"//g'
 }
@@ -3730,6 +3734,7 @@ Type=simple
 User=root
 Group=root
 ExecStart=/usr/local/bin/haproxy-ingress-controller \
+            --kubeconfig=/etc/haproxy/kubeconfig \
             --gateway-controller-name=haproxy.org/gateway-controller \
             --configmap-tcp-services=kube-system/haproxy-kubernetes-tcpservices \
             --configmap=kube-system/haproxy-kubernetes-ingress \
