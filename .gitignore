@@ -65,3 +65,8 @@ backups/*.bz2
 .copilot/
 backup-admb-hcfp-20260419.sql
 claw/
+.claude+
+.claude/
+.claude*
+.k8s-infra-secrets/
+.ansible/tmp/
