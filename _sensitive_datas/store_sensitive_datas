@@ -59,7 +59,8 @@
 # List of files and directories to include in the backup
 # Uses glob patterns for flexible file matching
 FILES_TO_BACKUP=(
-    k8s-infra 
+    k8s-infra
+    .k8s-infra-secrets
     oci-manage-config.sh 
     oci.json 
     .mc 
