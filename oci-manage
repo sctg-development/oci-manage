@@ -37,11 +37,11 @@ CF_API_EMAIL="user@example.org"
 CF_DOMAINS=("example.org" "example.com")
 CLUSTER_AS=4201234567
 CLUSTER_MEMBERS='node2 node3 node4 node5 node6 node7 node8'
-CERT_MANAGER_VERSION="v1.17.1"
+CERT_MANAGER_VERSION="v1.21.1"
 CILIUM_CLUSTER_POOL_IPV4_KUBERNETES_POD_CIDR=172.24.0.0/13
 CILIUM_CLUSTER_POOL_IPV6_KUBERNETES_POD_CIDR=fd62:83ce:1203:1234::/64
 #CILIUM_VERSION="v1.15.1" #"v1.14.6"
-CILIUM_VERSION="v1.17.2" #"v1.14.8"
+CILIUM_VERSION="v1.20.0" #"v1.17.2" #"v1.14.8"
 CLUSTER_HA_FQDN=ha.fqdn.com
 CONTROL_PLANE_INTERNAL_ADDRESS=master.private.fqdn.com
 ROUTING_MEMBER='oci-router'
@@ -51,12 +51,14 @@ EXTERNAL_CLUSTER_ZONE=cluster.external
 CONTROL_PLANE_IP=10.0.253.75
 CONTROL_PLANE_LOCAL=master
 CONTROL_PLANE_PORT=6443
+CONTROL_PLANES=''
+CONTROL_PLANE_CERT_SANS=("$CONTROL_PLANE_LOCAL" "$CONTROL_PLANE_INTERNAL_ADDRESS" "$HOSTNAME" "$CONTROL_PLANE_IP" "k8s-api" "k8s-api.private")
 DNS_PUBLIC_ZONE=example.org
 DOCKER_RUNTIME=containerd
 CILIUM_LB_IP_POOL=172.31.255.0/24
 CILIUM_LB_IP_POOL_V6=fd62:83ce:1203:1234::/64
 KUBE_PROXY_REPLACEMENT=true
-KUBERNET_MAJOR_VERSION=1.30
+KUBERNET_MAJOR_VERSION=1.37
 HAPROXY_INGRESS_CONTROLLER_VERSION="1.10.8"
 LETSENCRYPT_USER="user@example.com"
 OCI_DB=~/oci.json
@@ -93,7 +95,7 @@ STORAGE_BACKEND="longhorn"
 #STORAGE_BACKEND="openebs"
 STORAGE_LOCATION="/storage"
 STORAGE_REPLICAS=2
-LONGHORN_VERSION="1.8.1" #"1.6.4" #"1.6.2" #"1.5.4" #"1.6.0"
+LONGHORN_VERSION="1.12.1" #"1.6.4" #"1.6.2" #"1.5.4" #"1.6.0"
 LONGHORN_CA_ISSUER=$CA_COMPANY-ca-issuer
 MONITORING_NAMESPACE=monitoring
 GRAFANA_AGENT_VERSION="v0.32.1"
@@ -317,13 +319,14 @@ function init_install_software() {
   else
     HOST="$1"
     USERNAME="$2"
+    ssh -4 root@$HOST 'apt update && apt dist-upgrade -y && apt install -y iputils-ping vim apt-transport-https ca-certificates curl gnupg lsb-release'
     ssh -4 root@$HOST "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/docker.gpg"
     ssh -4 root@$HOST 'curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/trusted.gpg.d/google-k8s.gpg'
     ssh -4 root@$HOST 'curl -fsSL https://pkgs.k8s.io/core:/stable:/v'$KUBERNET_MAJOR_VERSION'/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg'
     ssh -4 root@$HOST 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/trusted.gpg.d/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list'
     #ssh -4 root@$HOST 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/trusted.gpg.d/google-k8s.gpg] http://apt.kubernetes.io/ kubernetes-xenial main"| tee /etc/apt/sources.list.d/k8s.list'
     ssh -4 root@$HOST 'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v'$KUBERNET_MAJOR_VERSION'/deb/ /" | tee /etc/apt/sources.list.d/kubernetes.list'
-    ssh -4 root@$HOST 'apt update && apt dist-upgrade -y && apt install -y iputils-ping psmisc cron vim wireguard iputils-ping docker-ce docker-ce-cli containerd.io docker-compose-plugin kubeadm kubelet kubectl kubernetes-cni haproxy jq nfs-common'
+    ssh -4 root@$HOST 'apt update && apt dist-upgrade -y && apt install -y iputils-ping psmisc cron vim wireguard iputils-ping docker-ce docker-ce-cli containerd.io docker-compose-plugin kubeadm kubelet kubectl kubernetes-cni haproxy jq nfs-common && apt-get install --only-upgrade -y containerd.io'
     ssh -4 root@$HOST "usermod -aG docker $USERNAME && reboot"
     cluster_minio_install_mc $HOST
   fi
@@ -551,13 +554,19 @@ function cluster_iptables_flush() {
   sudo iptables -F && sudo iptables -X
 }
 function cluster_reset_storage() {
-  if [ "$#" -ne 0 ]; then
-    echo "Illegal number of parameters:" && echo "    usage cluster_reset_storage"
+  if [ "$#" -gt 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_reset_storage [host]"
   else
-    for MEMBER in $K8S_CLUSTER; do
-      echo $MEMBER
-      ssh root@$MEMBER "rm -rf /storage/*"
-    done
+    if [ "$#" -eq 1 ]; then
+      HOST=$1
+      echo "$HOST"
+      ssh root@$HOST "rm -rf /storage/*"
+    else
+      for MEMBER in $K8S_CLUSTER; do
+        echo $MEMBER
+        ssh root@$MEMBER "rm -rf /storage/*"
+      done
+    fi
   fi
 }
 
@@ -620,7 +629,7 @@ function cluster_reset_control_plane() {
   sudo rm -f /etc/systemd/resolved.conf.d/k8s-resolve.conf
   sudo systemctl restart systemd-resolved
   sudo rm -rf $HOME/.kube &&
-    sudo rictl -r $CRI_SOCKET rmi -a &&
+    sudo crictl -r $CRI_SOCKET rmi -a &&
     sudo reboot
 }
 
@@ -667,6 +676,19 @@ function cluster_init_create_control_plane_with_kube_proxy() {
   cluster_init_create_ip_pool
 }
 
+function cluster_cilium_install_crds() {
+  local CRD_BASE="https://raw.githubusercontent.com/cilium/cilium/${CILIUM_VERSION}/pkg/k8s/apis/cilium.io/client/crds"
+  local REPO_BASE="https://raw.githubusercontent.com/cilium/cilium/${CILIUM_VERSION}"
+  for crd in ciliumbgpadvertisements ciliumbgpclusterconfigs ciliumbgpnodeconfigoverrides ciliumbgpnodeconfigs ciliumbgppeerconfigs ciliumcidrgroups ciliumclusterwideenvoyconfigs ciliumclusterwidenetworkpolicies ciliumegressgatewaypolicies ciliumendpoints ciliumenvoyconfigs ciliumidentities ciliumloadbalancerippools ciliumlocalredirectpolicies ciliumnetworkpolicies ciliumnodeconfigs ciliumnodes; do
+    kubectl apply -f "${CRD_BASE}/v2/${crd}.yaml"
+  done
+  for crd in ciliumdatapathplugins ciliumendpointslices ciliumgatewayclassconfigs ciliuml2announcementpolicies ciliumpodippools; do
+    kubectl apply -f "${CRD_BASE}/v2alpha1/${crd}.yaml"
+  done
+  kubectl apply -f "${REPO_BASE}/vendor/sigs.k8s.io/mcs-api/config/crd/multicluster.x-k8s.io_serviceexports.yaml"
+  kubectl apply -f "${REPO_BASE}/vendor/sigs.k8s.io/mcs-api/config/crd/multicluster.x-k8s.io_serviceimports.yaml"
+}
+
 function cluster_cilium_install() {
   METHOD=install
   REPLACEMENT="disabled"
@@ -688,13 +710,14 @@ function cluster_cilium_install() {
       --set hubble.ui.enabled=true \
       --set prometheus.enabled=true \
       --set operator.prometheus.enabled=true \
-      --set kubeProxyReplacement=true
-      --version $CILIUM_VERSION "
+      --set kubeProxyReplacement=true \
+      --version ${CILIUM_VERSION#v} "
   if [[ "$1" == "UNINSTALL" ]]; then
     helm uninstall cilium --namespace=kube-system
   else
     #IPAM="ipam.mode=cluster-pool,ipam.operator.clusterPoolIPv4PodCIDRList=$CILIUM_CLUSTER_POOL_IPV4_KUBERNETES_POD_CIDR"
     helm repo add cilium https://helm.cilium.io/
+    cluster_cilium_install_crds
     echo $CILIUM_CONFIG
     helm upgrade --install --namespace=kube-system --create-namespace cilium cilium/cilium \
       $CILIUM_CONFIG
@@ -702,6 +725,66 @@ function cluster_cilium_install() {
   #rm -f /tmp/cilium.yaml
   fi
 
+} 
+
+function cluster_init_generate_kubeadm_config() {
+  local CONFIG_FILE="${1:-/tmp/kubeadm-config.yaml}"
+  local CERT_SANS=""
+  for SAN in "${CONTROL_PLANE_CERT_SANS[@]}"; do
+    CERT_SANS+="  - ${SAN}\n"
+  done
+  local SKIP_PHASES=""
+  if [[ "$KUBE_PROXY_REPLACEMENT" == "true" ]]; then
+    SKIP_PHASES="
+  skipPhases:
+    - addon/kube-proxy"
+  fi
+  local PATCHES_DIR=""
+  for token in $KUBEADM_CONFIG_ADDITIONAL_OPTION; do
+    if [ "$token" == "--patches" ]; then
+      continue
+    fi
+    if [[ "$token" != "--"* ]]; then
+      PATCHES_DIR="$token"
+      break
+    fi
+  done
+  local PATCHES_YAML=""
+  if [ -n "$PATCHES_DIR" ]; then
+    PATCHES_YAML="
+patches:
+  directory: ${PATCHES_DIR}"
+  fi
+  cat > "$CONFIG_FILE" <<EOF
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: ${ADVERTISE_ADDRESS}
+  bindPort: ${CONTROL_PLANE_PORT}
+nodeRegistration:
+  criSocket: ${CRI_SOCKET}
+  name: $(hostname -s)
+  taints: null${SKIP_PHASES}${PATCHES_YAML}
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+certificatesDir: /etc/kubernetes/pki
+clusterName: kubernetes
+controlPlaneEndpoint: ${CONTROL_PLANE_INTERNAL_ADDRESS}:${CONTROL_PLANE_PORT}
+apiServer:
+  certSANs:
+$(printf "$CERT_SANS")
+networking:
+  podSubnet: "${KUBERNETES_POD_CIDR}"
+  serviceSubnet: "${KUBERNETES_SERVICE_CIDR}"
+  dnsDomain: cluster.local
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+imageRepository: registry.k8s.io
+
+EOF
+  echo "$CONFIG_FILE"
 }
 
 function random_init_token() {
@@ -740,16 +823,20 @@ function cluster_init_create_control_plane() {
   if [ -z "$ADVERTISE_ADDRESS" ]; then
     ADVERTISE_ADDRESS=$(/sbin/ip -o -4 addr list eth0 | awk '{print $4}' | cut -d/ -f1)
   fi
-  KUBEADM_CONFIG="${KUBEADM_CONFIG_ADDITIONAL_OPTION} --ignore-preflight-errors=NumCPU \
-    --pod-network-cidr=$KUBERNETES_POD_CIDR --service-cidr=$KUBERNETES_SERVICE_CIDR \
-    --cri-socket=$CRI_SOCKET \
-    --control-plane-endpoint=$CONTROL_PLANE_INTERNAL_ADDRESS \
-    --node-name $HOSTNAME \
-    --apiserver-advertise-address=$ADVERTISE_ADDRESS"
-
-  if [[ "$KUBE_PROXY_REPLACEMENT" == true ]]; then
-    KUBEADM_CONFIG+=" --skip-phases=addon/kube-proxy"
-  fi
+  KUBEADM_CONFIG_FILE=$(cluster_init_generate_kubeadm_config /tmp/kubeadm-init-config.yaml)
+  KUBEADM_CONFIG="--config=$KUBEADM_CONFIG_FILE --ignore-preflight-errors=NumCPU --skip-phases=addon/kube-proxy"
+  local OPT_SKIP_NEXT=false
+  for token in $KUBEADM_CONFIG_ADDITIONAL_OPTION; do
+    if [ "$token" == "--patches" ]; then
+      OPT_SKIP_NEXT=true
+      continue
+    fi
+    if [ "$OPT_SKIP_NEXT" == "true" ]; then
+      OPT_SKIP_NEXT=false
+      continue
+    fi
+    KUBEADM_CONFIG="$KUBEADM_CONFIG $token"
+  done
   echo "kubeadm init $KUBEADM_CONFIG"
   sudo kubeadm init $KUBEADM_CONFIG
 
@@ -770,10 +857,11 @@ function cluster_init_create_control_plane() {
   fi
   #kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/$GATEWAY_API_VERSION/experimental-install.yaml
   #cilium install --version $CILIUM_VERSION --helm-set kubeProxyReplacement=strict,k8sServiceHost=$CONTROL_PLANE_IP,k8sServicePort=$CONTROL_PLANE_PORT,$IPAM,tunnel=vxlan,bpf.masquerade=true,bgpControlPlane.enabled=true,bgp.announce.loadbalancerIP=true,bgp.announce.podCIDR=true,hubble.relay.enabled=true,hubble.ui.enabled=true,egressGateway.enabled=true,gatewayAPI.enabled=true
-  cluster_cilium_install
-  echo "sleeping for 60s"
-  sleep 60
-  cluster_init_create_ip_pool
+   cluster_cilium_install
+   echo "sleeping for 60s"
+   sleep 60
+   cluster_init_create_ip_pool
+   cluster_master_allow_schedule
 }
 
 function cluster_kubernetes_proxy_test() {
@@ -1124,18 +1212,19 @@ EOF
 
 function _get_pool_yaml() {
   cat <<EOF >/dev/stdout
-apiVersion: "cilium.io/v2alpha1"
+apiVersion: "cilium.io/v2"
 kind: CiliumLoadBalancerIPPool
 metadata:
   name: "oci-pool"
 spec:
-  cidrs:
+  blocks:
   - cidr: $CILIUM_LB_IP_POOL
   - cidr: $CILIUM_LB_IP_POOL_V6
 EOF
 }
 
 function cluster_init_create_ip_pool() {
+  kubectl wait --for=condition=established crd/ciliumloadbalancerippools.cilium.io --timeout=120s 2>/dev/null
   _get_pool_yaml | kubectl apply -f -
 }
 
@@ -2131,10 +2220,15 @@ function build_lookbusy() {
 }
 
 function cluster_deploy_lookbusy() {
-  if [ "$#" -ne 0 ]; then
-    echo "Illegal number of parameters:" && echo "    usage cluster_init_install_longhorn"
+  if [ "$#" -gt 1 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_deploy_lookbusy [host]"
   else
-    for MEMBER in $CLUSTER_MEMBERS; do
+    if [ "$#" -eq 1 ]; then
+      MEMBERS=$1
+    else
+      MEMBERS="$CLUSTER_MEMBERS"
+    fi
+    for MEMBER in $MEMBERS; do
       ARCH=$(get_host_arch $MEMBER)
       if [ "$ARCH" == "arm64" ]; then
         scp root@$ARM_SRC:/usr/local/bin/lb root@$MEMBER:/usr/local/bin/lb
@@ -4522,11 +4616,18 @@ function crypto_curl() {
   curl -L -s $1 | openssl aes-256-cbc -a -d -md sha256 $DECRYPT -out -
 }
 function cluster_apt_update_kubernetes_repo() {
-  if [ "$#" -ne 1 ]; then
-    echo "Illegal number of parameters:" && echo "    usage cluster_apt_update_kubernetes_repo version (ie: 1.29)"
+  if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "Illegal number of parameters:" && echo "    usage cluster_apt_update_kubernetes_repo version (ie: 1.29) [host]"
   else
     VERSION=$1
-    cluster_run_on_all_as_root "echo 'deb [arch=arm64 signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v$VERSION/deb/ /' > /etc/apt/sources.list.d/kubernetes.list && apt update"
+    if [ "$#" -eq 2 ]; then
+      HOST=$2
+      echo "$HOST"
+      ARCH=$(get_host_arch "$HOST")
+      ssh root@$HOST "echo 'deb [arch=$ARCH signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v$VERSION/deb/ /' > /etc/apt/sources.list.d/kubernetes.list && apt update"
+    else
+      cluster_run_on_all_as_root "echo 'deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v$VERSION/deb/ /' > /etc/apt/sources.list.d/kubernetes.list && apt update"
+    fi
   fi
 }
 
@@ -4719,7 +4820,7 @@ function cluster_help() {
   echo 'azure_install_cli:                                 install azure cli'
   echo 'cluster_apt_dist_upgrade:                          apt dist-upgrade on all the cluster'
   echo 'cluster_apt_install:                               install an apt package on all the cluster'
-  echo 'cluster_apt_update_kubernetes_repo:                update the Kubernetes major release in the apt source llist'
+  echo 'cluster_apt_update_kubernetes_repo:                update the Kubernetes major release in the apt source list on all members or a specific host'
   echo 'cluster_apt_list_upgradable:                       list all available upgrades'
   echo 'cluster_cilium_full_status:                        issue cilium status on each member'
   echo "cluster_cilium_install:                            install cilium (or upgrade with argument upgrade)"
