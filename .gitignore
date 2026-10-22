@@ -70,3 +70,7 @@ claw/
 .claude*
 .k8s-infra-secrets/
 .ansible/tmp/
+.keys.txt
+oci-manage-AUDIT.md
+oci-manage-config-AUDIT.md
+restart_aps.sh
